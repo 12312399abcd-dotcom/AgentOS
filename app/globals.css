@@ -29,6 +29,76 @@ a {
   padding: 32px 20px;
 }
 
+.topbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 18px;
+  min-height: 56px;
+  padding: 0 20px;
+}
+
+.brand {
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.topnav {
+  display: flex;
+  flex: 1;
+  gap: 14px;
+}
+
+.topnav a,
+.sidebar a,
+.switcher-menu a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.org-switcher {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.switcher-menu {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 220px;
+  padding: 10px;
+  position: absolute;
+  right: 20px;
+  z-index: 10;
+}
+
+.app-frame {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: calc(100vh - 56px);
+}
+
+.sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  padding: 18px;
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 10px;
+}
+
+.app-content {
+  min-width: 0;
+}
+
 .grid {
   display: grid;
   gap: 16px;
@@ -44,4 +114,89 @@ a {
 
 .muted {
   color: var(--muted);
+}
+
+.notice {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  color: #085d3a;
+  padding: 12px 14px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--foreground);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+button {
+  align-items: center;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  padding: 10px 14px;
+  width: fit-content;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.actions a {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .topnav {
+    flex-wrap: wrap;
+  }
+
+  .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
 }

@@ -81,9 +81,19 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(resolveDefaultWorkspaceRoute(orgSlug, member.role), req.url))
   }
 
+  if (routeTail.startsWith('settings') && member.role !== 'admin') {
+    return NextResponse.redirect(new URL(resolveDefaultWorkspaceRoute(orgSlug, member.role), req.url))
+  }
+
   if (routeTail === 'workspace' && member.role !== 'admin') {
     return NextResponse.redirect(new URL(resolveDefaultWorkspaceRoute(orgSlug, member.role), req.url))
   }
+
+  res.cookies.set('active_org_id', organization.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production'
+  })
 
   return res
 }

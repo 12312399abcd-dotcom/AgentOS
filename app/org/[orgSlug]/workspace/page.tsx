@@ -29,6 +29,10 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
           <strong>Finance Dashboard</strong>
           <p className="muted">Cashflow, payroll, forecast, invoices, period close.</p>
         </Link>
+        <Link className="card" href={`/org/${orgSlug}/settings/members`}>
+          <strong>Members</strong>
+          <p className="muted">Invite team members and assign organization roles.</p>
+        </Link>
       </div>
     </main>
   )

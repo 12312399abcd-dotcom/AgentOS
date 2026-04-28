@@ -13,6 +13,11 @@ import {
   type InviteMemberInput
 } from '@/lib/validators/organization.schema'
 
+function readString(formData: FormData, key: string) {
+  const value = formData.get(key)
+  return typeof value === 'string' ? value : ''
+}
+
 export async function createOrganization(input: CreateOrganizationInput) {
   const user = await requireUser()
   const parsed = createOrganizationSchema.parse(input)
@@ -87,22 +92,57 @@ export async function createOrganization(input: CreateOrganizationInput) {
   redirect(`/org/${organization.slug}/workspace`)
 }
 
+export async function createOrganizationFromForm(formData: FormData) {
+  await createOrganization({
+    name: readString(formData, 'name'),
+    slug: readString(formData, 'slug'),
+    timezone: readString(formData, 'timezone'),
+    currency: readString(formData, 'currency'),
+    businessType: readString(formData, 'businessType') as CreateOrganizationInput['businessType'],
+    payrollCycle: readString(formData, 'payrollCycle') as CreateOrganizationInput['payrollCycle'],
+    financialPeriod: 'monthly'
+  })
+}
+
 export async function inviteOrganizationMember(input: InviteMemberInput) {
   const parsed = inviteMemberSchema.parse(input)
   const user = await requireUser()
   await requireAdmin(parsed.organizationId)
 
   const admin = createAdminClient()
-  const { data: member } = await admin
-    .from('organization_members')
-    .select('id')
+
+  const { data: invitedProfile } = await admin.from('profiles').select('id').eq('email', parsed.email).maybeSingle()
+  if (invitedProfile) {
+    const { data: existingMember } = await admin
+      .from('organization_members')
+      .select('id')
+      .eq('organization_id', parsed.organizationId)
+      .eq('user_id', invitedProfile.id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (existingMember) {
+      throw new Error('This user is already an active member')
+    }
+  }
+
+  const { data: pendingInvitation } = await admin
+    .from('organization_invitations')
+    .select('id, token')
     .eq('organization_id', parsed.organizationId)
-    .eq('status', 'active')
-    .eq('user_id', user.id)
+    .eq('email', parsed.email)
+    .eq('status', 'pending')
     .maybeSingle()
 
-  if (!member) {
-    throw new Error('Only an active organization admin can invite members')
+  if (pendingInvitation) {
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 14)
+    await admin
+      .from('organization_invitations')
+      .update({ role: parsed.role, expires_at: expiresAt.toISOString() })
+      .eq('id', pendingInvitation.id)
+
+    return { token: pendingInvitation.token }
   }
 
   const token = randomBytes(32).toString('hex')
@@ -131,6 +171,29 @@ export async function inviteOrganizationMember(input: InviteMemberInput) {
   })
 
   return { token }
+}
+
+export async function inviteOrganizationMemberFromForm(organizationId: string, formData: FormData) {
+  await inviteOrganizationMember({
+    organizationId,
+    email: readString(formData, 'email'),
+    role: readString(formData, 'role') as InviteMemberInput['role']
+  })
+}
+
+export async function getInvitationPreview(token: string) {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('organization_invitations')
+    .select('email, role, status, expires_at, organizations(name, status)')
+    .eq('token', token)
+    .single()
+
+  if (error) {
+    return null
+  }
+
+  return data
 }
 
 export async function acceptInvitation(token: string) {

@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 
-import { listActiveMemberships } from '@/lib/services/permissions'
-import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
+import { resolvePostLoginRoute } from '@/lib/services/post-login'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(req: Request) {
@@ -19,22 +18,10 @@ export async function GET(req: Request) {
     redirect(`/invite/${inviteToken}`)
   }
 
-  const memberships = await listActiveMemberships()
-
-  if (memberships.length === 0) {
-    redirect('/onboarding/create-organization')
-  }
-
-  if (memberships.length > 1) {
-    redirect('/select-organization')
-  }
-
-  const membership = memberships[0]
-  const organization = Array.isArray(membership.organizations) ? membership.organizations[0] : membership.organizations
-
-  if (!organization) {
+  const route = await resolvePostLoginRoute()
+  if (route === '/unauthorized') {
     return NextResponse.redirect(new URL('/unauthorized', url.origin))
   }
 
-  redirect(resolveDefaultWorkspaceRoute(organization.slug, membership.role))
+  redirect(route)
 }
