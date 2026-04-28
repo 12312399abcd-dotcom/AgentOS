@@ -4,7 +4,11 @@ export const publishContentSchema = z.object({
   organizationId: z.string().uuid(),
   contentItemId: z.string().uuid(),
   publishedUrl: z.string().trim().url(),
-  publishedAt: z.string().datetime().optional().or(z.string().date().optional())
+  publishedAt: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/)
+    .optional()
 })
 
 export const updateSocialMetricsSchema = z.object({

@@ -3,10 +3,19 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
-import { buildProductionTasks, calculateProductionRisk } from '@/lib/services/content-booking'
+import {
+  buildProductionTasks,
+  calculateProductionRisk,
+  calculateProductionTaskDueDate
+} from '@/lib/services/content-booking'
 import { safeStorageFileName } from '@/lib/services/storage'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { scheduleContentSchema, type ScheduleContentInput } from '@/lib/validators/content.schema'
+import {
+  scheduleContentSchema,
+  updateContentScheduleSchema,
+  type ScheduleContentInput,
+  type UpdateContentScheduleInput
+} from '@/lib/validators/content.schema'
 
 export async function scheduleContent(input: ScheduleContentInput) {
   const parsed = scheduleContentSchema.parse(input)
@@ -107,6 +116,95 @@ export async function scheduleContentFromForm(organizationId: string, orgSlug: s
     bookingSource: 'content_schedule'
   })
 
+  revalidatePath(`/org/${orgSlug}/operation/content`)
+}
+
+export async function updateContentSchedule(input: UpdateContentScheduleInput) {
+  const parsed = updateContentScheduleSchema.parse(input)
+  const member = await requireWorkspaceAccess(parsed.organizationId, 'operation')
+  const admin = createAdminClient()
+
+  const { data: contentItem, error } = await admin
+    .from('content_items')
+    .select('id, publish_date, requires_design, requires_editing, requires_channel_manager')
+    .eq('organization_id', parsed.organizationId)
+    .eq('id', parsed.contentItemId)
+    .single()
+
+  if (error || !contentItem) throw new Error('Content item not found')
+
+  const productionRisk = calculateProductionRisk({
+    publishDate: parsed.publishDate,
+    requiresDesign: Boolean(contentItem.requires_design),
+    requiresEditing: Boolean(contentItem.requires_editing)
+  })
+
+  const { error: updateError } = await admin
+    .from('content_items')
+    .update({
+      publish_date: parsed.publishDate ?? null,
+      status: parsed.publishDate ? 'scheduled' : 'planned',
+      production_risk: productionRisk
+    })
+    .eq('organization_id', parsed.organizationId)
+    .eq('id', parsed.contentItemId)
+
+  if (updateError) throw new Error(updateError.message)
+
+  const { data: linkedTasks, error: taskReadError } = await admin
+    .from('tasks')
+    .select('id, task_type, required_role, status, due_date')
+    .eq('organization_id', parsed.organizationId)
+    .eq('content_item_id', parsed.contentItemId)
+    .neq('status', 'completed')
+
+  if (taskReadError) throw new Error(taskReadError.message)
+
+  if (parsed.publishDate && linkedTasks && linkedTasks.length > 0) {
+    const taskUpdates = await Promise.all(
+      linkedTasks.map((task) =>
+        admin
+          .from('tasks')
+          .update({
+            due_date: calculateProductionTaskDueDate(parsed.publishDate as string, task.task_type, task.required_role),
+            production_risk: productionRisk
+          })
+          .eq('organization_id', parsed.organizationId)
+          .eq('id', task.id)
+      )
+    )
+    const failedTaskUpdate = taskUpdates.find((result) => result.error)
+    if (failedTaskUpdate?.error) throw new Error(failedTaskUpdate.error.message)
+  }
+
+  await admin.from('audit_logs').insert({
+    organization_id: parsed.organizationId,
+    actor_id: member.user_id,
+    entity_type: 'content_item',
+    entity_id: parsed.contentItemId,
+    action: 'publish_date_updated',
+    old_data: { publish_date: contentItem.publish_date },
+    new_data: {
+      publish_date: parsed.publishDate,
+      production_risk: productionRisk,
+      recalculated_tasks: parsed.publishDate ? linkedTasks?.length ?? 0 : 0
+    }
+  })
+}
+
+export async function updateContentScheduleFromForm(
+  organizationId: string,
+  orgSlug: string,
+  contentItemId: string,
+  formData: FormData
+) {
+  await updateContentSchedule({
+    organizationId,
+    contentItemId,
+    publishDate: readOptionalString(formData, 'publishDate')
+  })
+
+  revalidatePath(`/org/${orgSlug}/operation/content/${contentItemId}`)
   revalidatePath(`/org/${orgSlug}/operation/content`)
 }
 

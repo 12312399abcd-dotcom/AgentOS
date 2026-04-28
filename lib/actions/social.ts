@@ -32,6 +32,10 @@ export async function publishContent(input: PublishContentInput) {
     throw new Error('Content item not found')
   }
 
+  if (!['approved', 'ready_to_publish', 'scheduled', 'published'].includes(content.status)) {
+    throw new Error('Content must be approved, scheduled, or ready to publish before it can be published')
+  }
+
   const publishedAt = parsed.publishedAt
     ? new Date(parsed.publishedAt).toISOString()
     : new Date().toISOString()

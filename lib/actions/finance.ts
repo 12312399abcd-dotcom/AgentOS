@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { assertFinancialPeriodEditable } from '@/lib/services/financial-periods'
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -65,6 +66,29 @@ async function getCurrentCash(admin: ReturnType<typeof createAdminClient>, organ
   return openingCash + moneyIn - moneyOut
 }
 
+async function assertMoneyOutAllowed(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  amount: number,
+  role: string
+) {
+  const { data: settings } = await admin
+    .from('finance_control_settings')
+    .select('minimum_cash_reserve, strict_spending_control')
+    .eq('organization_id', organizationId)
+    .single()
+
+  if (!settings?.strict_spending_control) return
+
+  const minimumReserve = Number(settings.minimum_cash_reserve ?? 0)
+  const currentCash = await getCurrentCash(admin, organizationId)
+  const projectedCash = currentCash - amount
+
+  if (projectedCash < minimumReserve && role !== 'admin') {
+    throw new Error('Strict spending control blocks this money out because it would break minimum cash reserve')
+  }
+}
+
 export async function createBusinessAccount(input: BusinessAccountInput) {
   const parsed = businessAccountSchema.parse(input)
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
@@ -103,6 +127,11 @@ export async function addCashflowTransaction(input: CashflowTransactionInput) {
   const admin = createAdminClient()
   await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
   await assertClientBelongsToOrg(admin, parsed.organizationId, parsed.clientId)
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.transactionDate)
+
+  if (parsed.direction === 'money_out') {
+    await assertMoneyOutAllowed(admin, parsed.organizationId, parsed.amount, member.role)
+  }
 
   const { data, error } = await admin
     .from('cashflow_transactions')
@@ -146,6 +175,7 @@ export async function addBusinessExpense(input: BusinessExpenseInput) {
   const admin = createAdminClient()
   await assertClientBelongsToOrg(admin, parsed.organizationId, parsed.clientId)
   await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.expenseDate)
 
   const totalAmount = parsed.amount + parsed.taxAmount
   const { data: expense, error } = await admin
@@ -202,6 +232,7 @@ export async function markBusinessExpensePaid(input: MarkBusinessExpensePaidInpu
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
   await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.paidDate)
 
   const { data: expense, error } = await admin
     .from('business_expenses')
@@ -249,6 +280,7 @@ export async function addCapitalTransaction(input: CapitalTransactionInput) {
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
   await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.transactionDate)
 
   const { data: settings } = await admin
     .from('finance_control_settings')
@@ -285,6 +317,10 @@ export async function addCapitalTransaction(input: CapitalTransactionInput) {
   if (error) throw new Error(error.message)
 
   const direction = ['owner_capital_injection', 'loan_received'].includes(parsed.transactionType) ? 'money_in' : 'money_out'
+  if (direction === 'money_out') {
+    await assertMoneyOutAllowed(admin, parsed.organizationId, parsed.amount, member.role)
+  }
+
   const { data: cashflow, error: cashflowError } = await admin
     .from('cashflow_transactions')
     .insert({

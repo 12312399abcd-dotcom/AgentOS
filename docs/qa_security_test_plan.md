@@ -57,14 +57,17 @@ This plan validates the MVP against the roadmap security model:
 
 1. Content schedule with publish date creates content item and linked production tasks.
 2. Content schedule without publish date does not auto-book production tasks.
-3. Published content requires a live published URL.
-4. Publishing creates or updates the linked `social_posts` row.
-5. Designer/editor/channel tasks remain linked to `content_item_id`.
-6. Task status transitions reject invalid jumps.
-7. Approved/completed task updates content production status when applicable.
-8. Notion sync preview returns mapped actions without inserting rows.
-9. Notion sync import inserts new content and tasks.
-10. Notion sync update modifies existing content by `notion_page_id`.
+3. Updating a content publish date recalculates incomplete designer/editor/channel task due dates.
+4. Completed linked tasks keep their original due date when publish date changes.
+5. Published content requires a live published URL.
+6. Publishing is rejected when content is still in early planning statuses.
+7. Publishing creates or updates the linked `social_posts` row.
+8. Designer/editor/channel tasks remain linked to `content_item_id`.
+9. Task status transitions reject invalid jumps.
+10. Approved/completed task updates content production status when applicable.
+11. Notion sync preview returns mapped actions without inserting rows.
+12. Notion sync import inserts new content and tasks.
+13. Notion sync update modifies existing content by `notion_page_id`.
 
 ## Finance Tests
 
@@ -75,11 +78,13 @@ This plan validates the MVP against the roadmap security model:
 5. Payroll payment creates payroll cashflow rows and marks items paid.
 6. Payroll payment below reserve requires admin.
 7. Owner draw below reserve requires admin override note.
-8. Income statement excludes owner draw and loan principal repayment from expenses.
-9. Balance sheet calculates loans payable from loan received minus loan repayment.
-10. Period close creates balance sheet snapshot and locks the financial period.
-11. Out-of-balance period close requires admin override note.
-12. Finance dashboard shows cash gap, payroll gap, spending allowance, and forecast variance.
+8. Strict spending control blocks finance moderator money-out transactions that would break minimum reserve.
+9. Admin can override strict spending control through audited finance actions where allowed.
+10. Income statement excludes owner draw and loan principal repayment from expenses.
+11. Balance sheet calculates loans payable from loan received minus loan repayment.
+12. Period close creates balance sheet snapshot and locks the financial period.
+13. Out-of-balance period close requires admin override note.
+14. Finance dashboard shows cash gap, payroll gap, spending allowance, and forecast variance.
 
 ## Cron Tests
 

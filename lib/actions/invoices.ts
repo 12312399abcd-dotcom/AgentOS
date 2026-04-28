@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { assertFinancialPeriodEditable } from '@/lib/services/financial-periods'
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createSimplePdf } from '@/lib/services/pdf'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -140,6 +141,7 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput) {
 
   if (!invoice) throw new Error('Invoice not found')
   if (invoice.status === 'cancelled') throw new Error('Cancelled invoices cannot be paid')
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.paidDate)
 
   const { error: updateError } = await admin
     .from('invoices')

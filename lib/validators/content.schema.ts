@@ -19,4 +19,11 @@ export const scheduleContentSchema = z.object({
   bookingSource: z.enum(['content_schedule', 'notion_sync']).default('content_schedule')
 })
 
+export const updateContentScheduleSchema = z.object({
+  organizationId: z.string().uuid(),
+  contentItemId: z.string().uuid(),
+  publishDate: z.string().date().optional()
+})
+
 export type ScheduleContentInput = z.infer<typeof scheduleContentSchema>
+export type UpdateContentScheduleInput = z.infer<typeof updateContentScheduleSchema>

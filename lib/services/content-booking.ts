@@ -14,6 +14,17 @@ function minusDays(date: string, days: number) {
   return value.toISOString().slice(0, 10)
 }
 
+export function calculateProductionTaskDueDate(publishDate: string, taskType?: string | null, requiredRole?: string | null) {
+  if (taskType === 'design' || requiredRole === 'designer') return minusDays(publishDate, 4)
+  if (taskType === 'editing' || requiredRole === 'editor') return minusDays(publishDate, 3)
+  if (taskType === 'marketing_review') return minusDays(publishDate, 2)
+  if (taskType === 'channel_scheduling' || taskType === 'publishing' || requiredRole === 'channel_manager') {
+    return minusDays(publishDate, 1)
+  }
+
+  return publishDate
+}
+
 export function calculateProductionRisk(input: Pick<ScheduleContentInput, 'publishDate' | 'requiresDesign' | 'requiresEditing'>) {
   if (!input.publishDate) {
     return 'normal'
@@ -49,7 +60,7 @@ export function buildProductionTasks(input: ScheduleContentInput): ProductionTas
       title: `Design assets for ${input.title}`,
       task_type: 'design',
       required_role: 'designer',
-      due_date: minusDays(input.publishDate, 4),
+      due_date: calculateProductionTaskDueDate(input.publishDate, 'design', 'designer'),
       production_risk: productionRisk
     })
   }
@@ -59,7 +70,7 @@ export function buildProductionTasks(input: ScheduleContentInput): ProductionTas
       title: `Edit copy/script for ${input.title}`,
       task_type: 'editing',
       required_role: 'editor',
-      due_date: minusDays(input.publishDate, 3),
+      due_date: calculateProductionTaskDueDate(input.publishDate, 'editing', 'editor'),
       production_risk: productionRisk
     })
   }
@@ -69,7 +80,7 @@ export function buildProductionTasks(input: ScheduleContentInput): ProductionTas
       title: `Schedule/publish ${input.title}`,
       task_type: 'channel_scheduling',
       required_role: 'channel_manager',
-      due_date: minusDays(input.publishDate, 1),
+      due_date: calculateProductionTaskDueDate(input.publishDate, 'channel_scheduling', 'channel_manager'),
       production_risk: productionRisk
     })
   }

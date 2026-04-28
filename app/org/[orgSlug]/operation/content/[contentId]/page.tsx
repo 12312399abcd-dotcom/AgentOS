@@ -1,4 +1,4 @@
-import { uploadContentAssetFromForm } from '@/lib/actions/content'
+import { updateContentScheduleFromForm, uploadContentAssetFromForm } from '@/lib/actions/content'
 import { publishContentFromForm } from '@/lib/actions/social'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createSignedFileUrl } from '@/lib/services/storage'
@@ -48,6 +48,7 @@ export default async function ContentDetailPage({ params }: ContentDetailPagePro
   const client = Array.isArray(content.clients) ? content.clients[0] : content.clients
   const publishAction = publishContentFromForm.bind(null, organization.id, orgSlug)
   const uploadAssetAction = uploadContentAssetFromForm.bind(null, organization.id, orgSlug, content.id)
+  const updateScheduleAction = updateContentScheduleFromForm.bind(null, organization.id, orgSlug, content.id)
   const assetUrl = await createSignedFileUrl(content.asset_url)
 
   return (
@@ -63,6 +64,13 @@ export default async function ContentDetailPage({ params }: ContentDetailPagePro
           <p><strong>Status:</strong> {content.status}</p>
           <p><strong>Publish date:</strong> {content.publish_date ?? 'No publish date'}</p>
           <p><strong>Risk:</strong> {content.production_risk}</p>
+          <form className="inline-form" action={updateScheduleAction}>
+            <label>
+              Publish date
+              <input name="publishDate" type="date" defaultValue={content.publish_date ?? ''} />
+            </label>
+            <button type="submit">Update schedule</button>
+          </form>
         </section>
         <section className="card">
           <h2>Creative Brief</h2>
