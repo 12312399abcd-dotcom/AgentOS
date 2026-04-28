@@ -147,6 +147,24 @@ textarea {
   padding: 10px 12px;
 }
 
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+td,
+th {
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 button {
   align-items: center;
   background: var(--accent);
@@ -173,6 +191,31 @@ button {
   border-radius: 6px;
   padding: 10px 14px;
   text-decoration: none;
+}
+
+.table-wrap {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.inline-form {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.checkbox-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.checkbox-grid label {
+  align-items: center;
+  display: flex;
+  font-weight: 400;
+  gap: 8px;
 }
 
 @media (max-width: 760px) {

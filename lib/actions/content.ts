@@ -1,5 +1,7 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
+
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
 import { buildProductionTasks, calculateProductionRisk } from '@/lib/services/content-booking'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -71,4 +73,33 @@ export async function scheduleContent(input: ScheduleContentInput) {
   })
 
   return { contentItemId: contentItem.id, taskCount: productionTasks.length }
+}
+
+function readOptionalString(formData: FormData, key: string) {
+  const value = formData.get(key)
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+function readBoolean(formData: FormData, key: string) {
+  return formData.get(key) === 'on'
+}
+
+export async function scheduleContentFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  await scheduleContent({
+    organizationId,
+    clientId: String(formData.get('clientId') ?? ''),
+    title: String(formData.get('title') ?? ''),
+    platform: String(formData.get('platform') ?? ''),
+    contentType: readOptionalString(formData, 'contentType'),
+    caption: readOptionalString(formData, 'caption'),
+    brief: readOptionalString(formData, 'brief'),
+    assetUrl: readOptionalString(formData, 'assetUrl') ?? '',
+    publishDate: readOptionalString(formData, 'publishDate'),
+    requiresDesign: readBoolean(formData, 'requiresDesign'),
+    requiresEditing: readBoolean(formData, 'requiresEditing'),
+    requiresChannelManager: readBoolean(formData, 'requiresChannelManager'),
+    bookingSource: 'content_schedule'
+  })
+
+  revalidatePath(`/org/${orgSlug}/operation/content`)
 }
