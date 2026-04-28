@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { createTaskFromForm, updateTaskStatusFromForm } from '@/lib/actions/tasks'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
@@ -16,10 +18,10 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
 
   await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
-  const [{ data: tasks }, { data: clients }, { data: members }] = await Promise.all([
+  const [{ data: tasks }, { data: clients }, { data: members }, { data: contentItems }] = await Promise.all([
     supabase
       .from('tasks')
-      .select('id, title, status, priority, due_date, task_type, required_role, clients(name)')
+      .select('id, title, status, priority, due_date, task_type, required_role, clients(name), content_items(title)')
       .eq('organization_id', organization.id)
       .order('due_date', { ascending: true, nullsFirst: false }),
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
@@ -27,7 +29,12 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
       .from('organization_members')
       .select('user_id, role, profiles(full_name, email)')
       .eq('organization_id', organization.id)
-      .eq('status', 'active')
+      .eq('status', 'active'),
+    supabase
+      .from('content_items')
+      .select('id, title')
+      .eq('organization_id', organization.id)
+      .order('publish_date', { ascending: true, nullsFirst: false })
   ])
   const createAction = createTaskFromForm.bind(null, organization.id, orgSlug)
   const updateAction = updateTaskStatusFromForm.bind(null, organization.id, orgSlug)
@@ -48,6 +55,15 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
               <option value="">No client</option>
               {(clients ?? []).map((client) => (
                 <option key={client.id} value={client.id}>{client.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Linked content
+            <select name="contentItemId" defaultValue="">
+              <option value="">No content item</option>
+              {(contentItems ?? []).map((content) => (
+                <option key={content.id} value={content.id}>{content.title}</option>
               ))}
             </select>
           </label>
@@ -95,6 +111,15 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
             </select>
           </label>
           <label>
+            Dependency
+            <select name="dependencyTaskId" defaultValue="">
+              <option value="">No dependency</option>
+              {(tasks ?? []).map((task) => (
+                <option key={task.id} value={task.id}>{task.title}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             Due date
             <input name="dueDate" type="date" />
           </label>
@@ -118,10 +143,14 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
             <tbody>
               {(tasks ?? []).map((task) => {
                 const client = Array.isArray(task.clients) ? task.clients[0] : task.clients
+                const content = Array.isArray(task.content_items) ? task.content_items[0] : task.content_items
 
                 return (
                   <tr key={task.id}>
-                    <td>{task.title}</td>
+                    <td>
+                      <Link href={`/org/${orgSlug}/operation/tasks/${task.id}`}>{task.title}</Link>
+                      {content?.title ? <p className="muted">{content.title}</p> : null}
+                    </td>
                     <td>{client?.name ?? 'No client'}</td>
                     <td>{task.status}</td>
                     <td>{task.due_date ?? 'No due date'}</td>

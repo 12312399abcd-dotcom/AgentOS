@@ -218,6 +218,80 @@ button {
   gap: 8px;
 }
 
+.view-tabs {
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px;
+}
+
+.view-tabs a {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-decoration: none;
+  text-transform: capitalize;
+}
+
+.filter-bar {
+  align-items: end;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 18px;
+  padding: 14px;
+}
+
+.board {
+  display: grid;
+  gap: 14px;
+  grid-auto-columns: minmax(260px, 1fr);
+  grid-auto-flow: column;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.board-column {
+  background: #eef2f6;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.board-column h2 {
+  font-size: 15px;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.timeline {
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.metrics-form {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(90px, 1fr));
+}
+
+.metrics-form button {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: flex-start;

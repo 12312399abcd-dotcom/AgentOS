@@ -19,6 +19,7 @@ export async function scheduleContent(input: ScheduleContentInput) {
     .insert({
       organization_id: parsed.organizationId,
       client_id: parsed.clientId,
+      campaign: parsed.campaign,
       title: parsed.title,
       platform: parsed.platform,
       content_type: parsed.contentType,
@@ -31,7 +32,8 @@ export async function scheduleContent(input: ScheduleContentInput) {
       requires_editing: parsed.requiresEditing,
       requires_channel_manager: parsed.requiresChannelManager,
       production_risk: productionRisk,
-      owner_id: member.user_id
+      owner_id: parsed.ownerId ?? member.user_id,
+      reviewer_id: parsed.reviewerId
     })
     .select('id, title')
     .single()
@@ -88,6 +90,7 @@ export async function scheduleContentFromForm(organizationId: string, orgSlug: s
   await scheduleContent({
     organizationId,
     clientId: String(formData.get('clientId') ?? ''),
+    campaign: readOptionalString(formData, 'campaign'),
     title: String(formData.get('title') ?? ''),
     platform: String(formData.get('platform') ?? ''),
     contentType: readOptionalString(formData, 'contentType'),
@@ -95,6 +98,8 @@ export async function scheduleContentFromForm(organizationId: string, orgSlug: s
     brief: readOptionalString(formData, 'brief'),
     assetUrl: readOptionalString(formData, 'assetUrl') ?? '',
     publishDate: readOptionalString(formData, 'publishDate'),
+    ownerId: readOptionalString(formData, 'ownerId'),
+    reviewerId: readOptionalString(formData, 'reviewerId'),
     requiresDesign: readBoolean(formData, 'requiresDesign'),
     requiresEditing: readBoolean(formData, 'requiresEditing'),
     requiresChannelManager: readBoolean(formData, 'requiresChannelManager'),

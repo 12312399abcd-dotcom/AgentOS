@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
 
-export async function POST() {
+import { generateClientReport } from '@/lib/actions/reports'
+import { generateReportSchema } from '@/lib/validators/report.schema'
+
+export async function POST(req: Request) {
+  const body = generateReportSchema.parse(await req.json())
+  const result = await generateClientReport(body)
+
   return NextResponse.json({
-    status: 'queued',
-    message: 'Report generation route is ready for the report-builder service.'
+    status: 'draft_created',
+    reportId: result.reportId
   })
 }
