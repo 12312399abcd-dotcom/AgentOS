@@ -1,0 +1,125 @@
+import { redirect } from 'next/navigation'
+
+import { createClient } from '@/lib/supabase/server'
+import { canAccessFinance, canAccessOperation, type Workspace } from './workspace'
+
+export type OrgMember = {
+  id: string
+  organization_id: string
+  user_id: string
+  role: string
+  status: string
+}
+
+export async function getCurrentUser() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error
+  } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return null
+  }
+
+  return user
+}
+
+export async function requireUser() {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  return user
+}
+
+export async function getOrganizationBySlug(orgSlug: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id, name, slug, status, timezone, currency')
+    .eq('slug', orgSlug)
+    .single()
+
+  if (error) {
+    return null
+  }
+
+  return data
+}
+
+export async function getCurrentOrgMember(orgId: string): Promise<OrgMember | null> {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    return null
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('id, organization_id, user_id, role, status')
+    .eq('organization_id', orgId)
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .single()
+
+  if (error) {
+    return null
+  }
+
+  return data
+}
+
+export async function requireOrgAccess(orgId: string) {
+  const member = await getCurrentOrgMember(orgId)
+
+  if (!member) {
+    redirect('/unauthorized')
+  }
+
+  return member
+}
+
+export async function requireWorkspaceAccess(orgId: string, workspace: Workspace) {
+  const member = await requireOrgAccess(orgId)
+
+  if (workspace === 'operation' && !canAccessOperation(member.role)) {
+    redirect('/unauthorized')
+  }
+
+  if (workspace === 'finance' && !canAccessFinance(member.role)) {
+    redirect('/unauthorized')
+  }
+
+  return member
+}
+
+export async function requireAdmin(orgId: string) {
+  const member = await requireOrgAccess(orgId)
+
+  if (member.role !== 'admin') {
+    redirect('/unauthorized')
+  }
+
+  return member
+}
+
+export async function listActiveMemberships() {
+  const user = await requireUser()
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('id, role, organizations(id, name, slug, status)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data ?? []
+}
