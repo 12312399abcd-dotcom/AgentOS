@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 
 import { requireAdmin, requireUser } from '@/lib/services/permissions'
 import { writeAuditLog } from '@/lib/services/audit'
+import { startMemberSession } from '@/lib/services/sessions'
 import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -13,11 +14,13 @@ import {
   inviteMemberSchema,
   updateFinanceControlSettingsSchema,
   updateMemberTimeLimitsSchema,
+  updateOrganizationMemberSchema,
   updateOrganizationSettingsSchema,
   type CreateOrganizationInput,
   type InviteMemberInput,
   type UpdateFinanceControlSettingsInput,
   type UpdateMemberTimeLimitsInput,
+  type UpdateOrganizationMemberInput,
   type UpdateOrganizationSettingsInput
 } from '@/lib/validators/organization.schema'
 
@@ -181,12 +184,15 @@ export async function inviteOrganizationMember(input: InviteMemberInput) {
   return { token }
 }
 
-export async function inviteOrganizationMemberFromForm(organizationId: string, formData: FormData) {
-  await inviteOrganizationMember({
+export async function inviteOrganizationMemberFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  const invitation = await inviteOrganizationMember({
     organizationId,
     email: readString(formData, 'email'),
     role: readString(formData, 'role') as InviteMemberInput['role']
   })
+
+  revalidatePath(`/org/${orgSlug}/settings/members`)
+  redirect(`/org/${orgSlug}/settings/members?inviteToken=${invitation.token}`)
 }
 
 export async function updateOrganizationSettings(input: UpdateOrganizationSettingsInput) {
@@ -372,6 +378,70 @@ export async function updateMemberTimeLimitsFromForm(organizationId: string, org
   revalidatePath(`/org/${orgSlug}/settings/sessions`)
 }
 
+export async function updateOrganizationMember(input: UpdateOrganizationMemberInput) {
+  const parsed = updateOrganizationMemberSchema.parse(input)
+  const adminMember = await requireAdmin(parsed.organizationId)
+  const admin = createAdminClient()
+
+  const { data: current } = await admin
+    .from('organization_members')
+    .select('id, user_id, role, status')
+    .eq('organization_id', parsed.organizationId)
+    .eq('user_id', parsed.userId)
+    .single()
+
+  if (!current) throw new Error('Member not found')
+
+  const removingAdminAccess = current.role === 'admin' && (parsed.role !== 'admin' || parsed.status !== 'active')
+  if (removingAdminAccess) {
+    const { count } = await admin
+      .from('organization_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', parsed.organizationId)
+      .eq('role', 'admin')
+      .eq('status', 'active')
+
+    if ((count ?? 0) <= 1) {
+      throw new Error('Cannot remove or demote the last active admin')
+    }
+  }
+
+  const { error } = await admin
+    .from('organization_members')
+    .update({
+      role: parsed.role,
+      status: parsed.status
+    })
+    .eq('id', current.id)
+
+  if (error) throw new Error(error.message)
+
+  await writeAuditLog({
+    organizationId: parsed.organizationId,
+    actorId: adminMember.user_id,
+    entityType: 'organization_member',
+    entityId: current.id,
+    action: 'membership_updated',
+    oldData: current,
+    newData: {
+      user_id: parsed.userId,
+      role: parsed.role,
+      status: parsed.status
+    }
+  })
+}
+
+export async function updateOrganizationMemberFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  await updateOrganizationMember({
+    organizationId,
+    userId: readString(formData, 'userId'),
+    role: readString(formData, 'role') as UpdateOrganizationMemberInput['role'],
+    status: readString(formData, 'status') as UpdateOrganizationMemberInput['status']
+  })
+
+  revalidatePath(`/org/${orgSlug}/settings/members`)
+}
+
 export async function getInvitationPreview(token: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -402,6 +472,10 @@ export async function acceptInvitation(token: string) {
   }
 
   if (invitation.status !== 'pending' || new Date(invitation.expires_at) < new Date()) {
+    if (new Date(invitation.expires_at) < new Date()) {
+      await admin.from('organization_invitations').update({ status: 'expired' }).eq('id', invitation.id)
+    }
+
     throw new Error('Invitation is no longer valid')
   }
 
@@ -441,5 +515,6 @@ export async function acceptInvitation(token: string) {
   })
 
   const org = Array.isArray(invitation.organizations) ? invitation.organizations[0] : invitation.organizations
+  await startMemberSession(invitation.organization_id, user.id)
   redirect(resolveDefaultWorkspaceRoute(org.slug, invitation.role))
 }

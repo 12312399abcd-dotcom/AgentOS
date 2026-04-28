@@ -1,5 +1,5 @@
 import { createClientFromForm } from '@/lib/actions/clients'
-import { getOrganizationBySlug, requireAdmin, requireWorkspaceAccess } from '@/lib/services/permissions'
+import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
 type OperationClientsPageProps = {

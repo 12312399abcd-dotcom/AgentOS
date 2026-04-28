@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { requireUser } from '@/lib/services/permissions'
 import { resolvePostLoginRoute } from '@/lib/services/post-login'
-import { startMemberSession } from '@/lib/services/sessions'
+import { endCurrentMemberSession, startMemberSession } from '@/lib/services/sessions'
 import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
 import { createClient } from '@/lib/supabase/server'
 
@@ -84,12 +84,26 @@ export async function selectOrganizationFromForm(formData: FormData) {
   const organizationId = requiredString(formData, 'organizationId')
   const orgSlug = requiredString(formData, 'orgSlug')
   const role = requiredString(formData, 'role')
+  const currentOrganizationId = formData.get('currentOrganizationId')
+
+  if (
+    typeof currentOrganizationId === 'string' &&
+    currentOrganizationId &&
+    currentOrganizationId !== organizationId
+  ) {
+    await endCurrentMemberSession(currentOrganizationId)
+  }
 
   await startMemberSession(organizationId, user.id)
   redirect(resolveDefaultWorkspaceRoute(orgSlug, role))
 }
 
-export async function signOut() {
+export async function signOut(formData: FormData) {
+  const organizationId = formData.get('organizationId')
+  if (typeof organizationId === 'string' && organizationId) {
+    await endCurrentMemberSession(organizationId)
+  }
+
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/login')

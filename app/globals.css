@@ -309,6 +309,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.ghost-button,
+.switcher-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  padding: 7px 10px;
+}
+
+.ghost-button:hover,
+.switcher-button:hover {
+  background: var(--panel-subtle);
+}
+
+.switcher-button {
+  border: 0;
+  justify-content: flex-start;
+  width: 100%;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -7,6 +7,7 @@
    - `0001_agency_os_foundation.sql`
    - `0002_reports_draft_data.sql`
    - `0003_storage_buckets.sql`
+   - `0004_invoice_file_url.sql`
 3. Confirm RLS is enabled on all business tables.
 4. Confirm storage buckets are private:
    - `client-assets`

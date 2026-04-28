@@ -19,13 +19,13 @@ for (const file of files) {
   const text = readFileSync(file, 'utf8')
   const rel = file.replace(`${root}/`, '')
   const isAllowedAuthAction = rel === 'lib/actions/auth.ts'
-  const isSecurityCheckScript = rel === 'scripts/static-security-check.mjs'
+  const isToolingScript = rel.startsWith('scripts/')
 
   if (rel.startsWith('app/api/cron/') && !text.includes('verifyCron(req)')) {
     findings.push(`${rel}: cron route does not call verifyCron(req)`)
   }
 
-  if (text.includes('SUPABASE_SERVICE_ROLE_KEY') && !rel.startsWith('lib/supabase/admin') && !isSecurityCheckScript) {
+  if (text.includes('SUPABASE_SERVICE_ROLE_KEY') && !rel.startsWith('lib/supabase/admin') && !isToolingScript) {
     findings.push(`${rel}: references SUPABASE_SERVICE_ROLE_KEY outside admin client`)
   }
 

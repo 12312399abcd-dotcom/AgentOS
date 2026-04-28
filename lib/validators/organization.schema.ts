@@ -45,8 +45,16 @@ export const updateMemberTimeLimitsSchema = z.object({
   weeklyTimeLimitMinutes: z.coerce.number().int().min(0)
 })
 
+export const updateOrganizationMemberSchema = z.object({
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: z.enum(['admin', 'finance_moderator', 'designer', 'editor', 'marketing', 'channel_manager', 'viewer']),
+  status: z.enum(['active', 'suspended', 'removed'])
+})
+
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>
 export type UpdateOrganizationSettingsInput = z.infer<typeof updateOrganizationSettingsSchema>
 export type UpdateFinanceControlSettingsInput = z.infer<typeof updateFinanceControlSettingsSchema>
 export type UpdateMemberTimeLimitsInput = z.infer<typeof updateMemberTimeLimitsSchema>
+export type UpdateOrganizationMemberInput = z.infer<typeof updateOrganizationMemberSchema>

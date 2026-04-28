@@ -94,6 +94,10 @@ mustContain('vercel.json', '/api/cron/payroll-readiness')
 mustContain('vercel.json', '/api/cron/daily-cashflow-review')
 mustContain('docs/qa_security_test_plan.md', 'Role-Based QA Matrix')
 mustContain('docs/deployment_launch_checklist.md', 'Production Smoke Test')
+mustContain('docs/deployment_launch_checklist.md', '0004_invoice_file_url.sql')
+mustContain('README.md', 'npm run verify')
+mustContain('README.md', 'SUPABASE_SERVICE_ROLE_KEY')
+mustExist('eslint.config.mjs')
 
 if (failures.length > 0) {
   console.error(failures.join('\n'))

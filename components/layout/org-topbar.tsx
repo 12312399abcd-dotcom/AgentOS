@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { signOut } from '@/lib/actions/auth'
+import { selectOrganizationFromForm, signOut } from '@/lib/actions/auth'
 import { listActiveMemberships } from '@/lib/services/permissions'
 import { getUnreadNotificationCount } from '@/lib/services/notifications'
 import { canAccessFinance, canAccessOperation, resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
@@ -45,15 +45,22 @@ export async function OrgTopbar({ organizationId, orgSlug, role }: OrgTopbarProp
                 }
 
                 return (
-                  <Link key={membership.id} href={resolveDefaultWorkspaceRoute(organization.slug, membership.role)}>
-                    {organization.name}
-                  </Link>
+                  <form key={membership.id} action={selectOrganizationFromForm}>
+                    <input type="hidden" name="currentOrganizationId" value={organizationId} />
+                    <input type="hidden" name="organizationId" value={organization.id} />
+                    <input type="hidden" name="orgSlug" value={organization.slug} />
+                    <input type="hidden" name="role" value={membership.role} />
+                    <button className="switcher-button" type="submit">
+                      {organization.name}
+                    </button>
+                  </form>
                 )
               })}
             </div>
           </details>
         ) : null}
         <form action={signOut}>
+          <input type="hidden" name="organizationId" value={organizationId} />
           <button className="ghost-button" type="submit">Sign out</button>
         </form>
       </div>
