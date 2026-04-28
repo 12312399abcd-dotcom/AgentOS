@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
 import { buildProductionTasks, calculateProductionRisk } from '@/lib/services/content-booking'
+import { safeStorageFileName } from '@/lib/services/storage'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { scheduleContentSchema, type ScheduleContentInput } from '@/lib/validators/content.schema'
 
@@ -107,4 +108,60 @@ export async function scheduleContentFromForm(organizationId: string, orgSlug: s
   })
 
   revalidatePath(`/org/${orgSlug}/operation/content`)
+}
+
+export async function uploadContentAssetFromForm(organizationId: string, orgSlug: string, contentItemId: string, formData: FormData) {
+  const member = await requireWorkspaceAccess(organizationId, 'operation')
+  const admin = createAdminClient()
+  const file = formData.get('asset')
+
+  if (!(file instanceof File)) {
+    throw new Error('Asset file is required')
+  }
+
+  if (file.size <= 0) {
+    throw new Error('Asset file is empty')
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error('Asset file must be 20MB or smaller')
+  }
+
+  const { data: contentItem } = await admin
+    .from('content_items')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('id', contentItemId)
+    .single()
+
+  if (!contentItem) throw new Error('Content item not found')
+
+  const fileName = safeStorageFileName(file.name) || 'asset'
+  const path = `${organizationId}/content/${contentItemId}/${Date.now()}-${fileName}`
+  const { error: uploadError } = await admin.storage.from('client-assets').upload(path, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false
+  })
+
+  if (uploadError) throw new Error(uploadError.message)
+
+  const storageUrl = `storage://client-assets/${path}`
+  const { error: updateError } = await admin
+    .from('content_items')
+    .update({ asset_url: storageUrl })
+    .eq('organization_id', organizationId)
+    .eq('id', contentItemId)
+
+  if (updateError) throw new Error(updateError.message)
+
+  await admin.from('audit_logs').insert({
+    organization_id: organizationId,
+    actor_id: member.user_id,
+    entity_type: 'content_item',
+    entity_id: contentItemId,
+    action: 'asset_uploaded',
+    new_data: { bucket: 'client-assets', path, size: file.size, type: file.type }
+  })
+
+  revalidatePath(`/org/${orgSlug}/operation/content/${contentItemId}`)
 }

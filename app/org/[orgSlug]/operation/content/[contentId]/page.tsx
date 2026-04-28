@@ -1,5 +1,7 @@
+import { uploadContentAssetFromForm } from '@/lib/actions/content'
 import { publishContentFromForm } from '@/lib/actions/social'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
+import { createSignedFileUrl } from '@/lib/services/storage'
 import { createClient } from '@/lib/supabase/server'
 
 type ContentDetailPageProps = {
@@ -45,6 +47,8 @@ export default async function ContentDetailPage({ params }: ContentDetailPagePro
 
   const client = Array.isArray(content.clients) ? content.clients[0] : content.clients
   const publishAction = publishContentFromForm.bind(null, organization.id, orgSlug)
+  const uploadAssetAction = uploadContentAssetFromForm.bind(null, organization.id, orgSlug, content.id)
+  const assetUrl = await createSignedFileUrl(content.asset_url)
 
   return (
     <main className="shell">
@@ -65,7 +69,11 @@ export default async function ContentDetailPage({ params }: ContentDetailPagePro
           <p>{content.brief ?? 'No brief yet.'}</p>
           <h2>Caption / Script</h2>
           <p>{content.caption ?? 'No caption yet.'}</p>
-          {content.asset_url ? <p><a href={content.asset_url}>Asset</a></p> : null}
+          {assetUrl ? <p><a href={assetUrl}>Asset</a></p> : null}
+          <form className="form" action={uploadAssetAction}>
+            <label>Upload asset<input name="asset" type="file" required /></label>
+            <button type="submit">Upload asset</button>
+          </form>
         </section>
       </div>
       <section className="card">

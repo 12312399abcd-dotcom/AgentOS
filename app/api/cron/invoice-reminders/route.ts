@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { verifyCron } from '@/lib/services/cron'
+import { createNotifications, listFinanceRecipientIds } from '@/lib/services/notifications'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: Request) {
@@ -9,10 +10,13 @@ export async function GET(req: Request) {
   }
 
   const today = new Date().toISOString().slice(0, 10)
+  const threeDaysOut = new Date()
+  threeDaysOut.setDate(threeDaysOut.getDate() + 3)
+  const dueSoonDate = threeDaysOut.toISOString().slice(0, 10)
   const admin = createAdminClient()
-  const { data: invoices, error } = await admin
+  const { data: overdueInvoices, error } = await admin
     .from('invoices')
-    .select('id, organization_id, invoice_number, due_date')
+    .select('id, organization_id, invoice_number, due_date, organizations(slug)')
     .eq('status', 'sent')
     .lt('due_date', today)
 
@@ -20,12 +24,42 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  if ((invoices ?? []).length > 0) {
+  const { data: dueSoonInvoices, error: dueSoonError } = await admin
+    .from('invoices')
+    .select('id, organization_id, invoice_number, due_date, organizations(slug)')
+    .eq('status', 'sent')
+    .gte('due_date', today)
+    .lte('due_date', dueSoonDate)
+
+  if (dueSoonError) {
+    return NextResponse.json({ error: dueSoonError.message }, { status: 500 })
+  }
+
+  if ((overdueInvoices ?? []).length > 0) {
     await admin
       .from('invoices')
       .update({ status: 'overdue' })
-      .in('id', invoices!.map((invoice) => invoice.id))
+      .in('id', overdueInvoices!.map((invoice) => invoice.id))
   }
 
-  return NextResponse.json({ overdue: invoices?.length ?? 0 })
+  const notifications = []
+
+  for (const invoice of [...(overdueInvoices ?? []), ...(dueSoonInvoices ?? [])]) {
+    const financeRecipients = await listFinanceRecipientIds(invoice.organization_id)
+    const organization = Array.isArray(invoice.organizations) ? invoice.organizations[0] : invoice.organizations
+    const isOverdue = invoice.due_date < today
+
+    notifications.push(...financeRecipients.map((userId) => ({
+      organizationId: invoice.organization_id,
+      userId,
+      type: isOverdue ? 'invoice_overdue' : 'invoice_due_soon',
+      title: isOverdue ? 'Invoice overdue' : 'Invoice due soon',
+      message: `${invoice.invoice_number} due ${invoice.due_date}`,
+      linkUrl: organization?.slug ? `/org/${organization.slug}/finance/invoices` : undefined
+    })))
+  }
+
+  await createNotifications(notifications)
+
+  return NextResponse.json({ overdue: overdueInvoices?.length ?? 0, dueSoon: dueSoonInvoices?.length ?? 0, notifications: notifications.length })
 }

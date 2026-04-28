@@ -1,7 +1,8 @@
 import Link from 'next/link'
 
-import { approveReportFromForm } from '@/lib/actions/reports'
+import { approveReportFromForm, exportReportPdfFromForm } from '@/lib/actions/reports'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
+import { createSignedFileUrl } from '@/lib/services/storage'
 import { createClient } from '@/lib/supabase/server'
 import type { ReportDraft } from '@/lib/services/report-builder'
 
@@ -35,6 +36,8 @@ export default async function ReportDetailPage({ params }: ReportDetailPageProps
   const client = Array.isArray(report.clients) ? report.clients[0] : report.clients
   const data = report.report_data as ReportDraft
   const approveAction = approveReportFromForm.bind(null, organization.id, orgSlug)
+  const exportAction = exportReportPdfFromForm.bind(null, organization.id, orgSlug)
+  const fileUrl = await createSignedFileUrl(report.file_url)
 
   return (
     <main className="shell">
@@ -115,7 +118,11 @@ export default async function ReportDetailPage({ params }: ReportDetailPageProps
       </section>
       <section className="card">
         <h2>Export</h2>
-        <p className="muted">PDF export and Supabase Storage upload will be connected in a later report export pass.</p>
+        <form action={exportAction}>
+          <input type="hidden" name="reportId" value={report.id} />
+          <button type="submit">Generate PDF</button>
+        </form>
+        {fileUrl ? <p><a href={fileUrl}>Open stored PDF</a></p> : <p className="muted">No stored PDF yet.</p>}
       </section>
     </main>
   )

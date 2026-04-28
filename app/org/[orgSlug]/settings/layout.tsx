@@ -1,4 +1,5 @@
 import { OrgTopbar } from '@/components/layout/org-topbar'
+import { WorkspaceBreadcrumbs } from '@/components/layout/breadcrumbs'
 import { WorkspaceSidebar } from '@/components/layout/workspace-sidebar'
 import { getOrganizationBySlug, requireAdmin } from '@/lib/services/permissions'
 
@@ -19,10 +20,13 @@ export default async function SettingsLayout({ children, params }: SettingsLayou
 
   return (
     <>
-      <OrgTopbar orgSlug={orgSlug} role={member.role} />
+      <OrgTopbar organizationId={organization.id} orgSlug={orgSlug} role={member.role} />
       <div className="app-frame">
         <WorkspaceSidebar orgSlug={orgSlug} workspace="settings" />
-        <div className="app-content">{children}</div>
+        <div className="app-content">
+          <WorkspaceBreadcrumbs orgSlug={orgSlug} workspace="settings" />
+          {children}
+        </div>
       </div>
     </>
   )

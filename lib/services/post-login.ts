@@ -1,5 +1,7 @@
 import { listActiveMemberships } from '@/lib/services/permissions'
+import { startMemberSession } from '@/lib/services/sessions'
 import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
+import { createClient } from '@/lib/supabase/server'
 
 export async function resolvePostLoginRoute() {
   const memberships = await listActiveMemberships()
@@ -17,6 +19,15 @@ export async function resolvePostLoginRoute() {
 
   if (!organization) {
     return '/unauthorized'
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    await startMemberSession(organization.id, user.id)
   }
 
   return resolveDefaultWorkspaceRoute(organization.slug, membership.role)

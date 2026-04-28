@@ -24,6 +24,9 @@ export default async function ContentTablePage({ params, searchParams }: Content
   return (
     <main className="shell">
       <h1>Content Table</h1>
+      <div className="actions">
+        <a href={`/api/exports/content?orgSlug=${orgSlug}`}>Export CSV</a>
+      </div>
       <ContentFilters clients={clients} members={members} />
       <div className="table-wrap">
         <table>

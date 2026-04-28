@@ -1,16 +1,24 @@
 'use server'
 
 import { randomBytes } from 'crypto'
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { requireAdmin, requireUser } from '@/lib/services/permissions'
+import { writeAuditLog } from '@/lib/services/audit'
 import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   createOrganizationSchema,
   inviteMemberSchema,
+  updateFinanceControlSettingsSchema,
+  updateMemberTimeLimitsSchema,
+  updateOrganizationSettingsSchema,
   type CreateOrganizationInput,
-  type InviteMemberInput
+  type InviteMemberInput,
+  type UpdateFinanceControlSettingsInput,
+  type UpdateMemberTimeLimitsInput,
+  type UpdateOrganizationSettingsInput
 } from '@/lib/validators/organization.schema'
 
 function readString(formData: FormData, key: string) {
@@ -179,6 +187,189 @@ export async function inviteOrganizationMemberFromForm(organizationId: string, f
     email: readString(formData, 'email'),
     role: readString(formData, 'role') as InviteMemberInput['role']
   })
+}
+
+export async function updateOrganizationSettings(input: UpdateOrganizationSettingsInput) {
+  const parsed = updateOrganizationSettingsSchema.parse(input)
+  const member = await requireAdmin(parsed.organizationId)
+  const admin = createAdminClient()
+
+  const { data: current } = await admin
+    .from('organizations')
+    .select('id, name, slug, timezone, currency')
+    .eq('id', parsed.organizationId)
+    .single()
+
+  if (!current) throw new Error('Organization not found')
+
+  if (current.slug !== parsed.slug) {
+    const { data: existing } = await admin
+      .from('organizations')
+      .select('id')
+      .eq('slug', parsed.slug)
+      .neq('id', parsed.organizationId)
+      .maybeSingle()
+
+    if (existing) throw new Error('Organization slug is already taken')
+  }
+
+  const { error } = await admin
+    .from('organizations')
+    .update({
+      name: parsed.name,
+      slug: parsed.slug,
+      timezone: parsed.timezone,
+      currency: parsed.currency,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', parsed.organizationId)
+
+  if (error) throw new Error(error.message)
+
+  await writeAuditLog({
+    organizationId: parsed.organizationId,
+    actorId: member.user_id,
+    entityType: 'organization',
+    entityId: parsed.organizationId,
+    action: 'settings_updated',
+    oldData: current,
+    newData: parsed
+  })
+
+  return { slug: parsed.slug }
+}
+
+export async function updateFinanceControlSettings(input: UpdateFinanceControlSettingsInput) {
+  const parsed = updateFinanceControlSettingsSchema.parse(input)
+  const member = await requireAdmin(parsed.organizationId)
+  const admin = createAdminClient()
+
+  const { data: current } = await admin
+    .from('finance_control_settings')
+    .select('*')
+    .eq('organization_id', parsed.organizationId)
+    .single()
+
+  const payload = {
+    payroll_cycle: parsed.payrollCycle,
+    reserve_months: parsed.reserveMonths,
+    minimum_cash_reserve: parsed.minimumCashReserve,
+    tax_reserve_rate: parsed.taxReserveRate,
+    expense_variance_warning_percent: parsed.expenseVarianceWarningPercent,
+    cash_risk_warning_days: parsed.cashRiskWarningDays,
+    strict_spending_control: parsed.strictSpendingControl,
+    owner_draw_requires_reserve_check: parsed.ownerDrawRequiresReserveCheck,
+    updated_at: new Date().toISOString()
+  }
+
+  const { error } = await admin
+    .from('finance_control_settings')
+    .upsert({
+      organization_id: parsed.organizationId,
+      financial_period: 'monthly',
+      ...payload
+    })
+
+  if (error) throw new Error(error.message)
+
+  await writeAuditLog({
+    organizationId: parsed.organizationId,
+    actorId: member.user_id,
+    entityType: 'finance_control_settings',
+    action: 'settings_updated',
+    oldData: current,
+    newData: payload
+  })
+}
+
+export async function updateOrganizationSettingsFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  const result = await updateOrganizationSettings({
+    organizationId,
+    name: readString(formData, 'name'),
+    slug: readString(formData, 'slug'),
+    timezone: readString(formData, 'timezone'),
+    currency: readString(formData, 'currency')
+  })
+
+  revalidatePath(`/org/${orgSlug}/settings/organization`)
+
+  if (result.slug !== orgSlug) {
+    redirect(`/org/${result.slug}/settings/organization`)
+  }
+}
+
+export async function updateFinanceControlSettingsFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  await updateFinanceControlSettings({
+    organizationId,
+    payrollCycle: readString(formData, 'payrollCycle') as UpdateFinanceControlSettingsInput['payrollCycle'],
+    reserveMonths: Number(formData.get('reserveMonths') ?? 0),
+    minimumCashReserve: Number(formData.get('minimumCashReserve') ?? 0),
+    taxReserveRate: Number(formData.get('taxReserveRate') ?? 0),
+    expenseVarianceWarningPercent: Number(formData.get('expenseVarianceWarningPercent') ?? 0),
+    cashRiskWarningDays: Number(formData.get('cashRiskWarningDays') ?? 0),
+    strictSpendingControl: formData.get('strictSpendingControl') === 'on',
+    ownerDrawRequiresReserveCheck: formData.get('ownerDrawRequiresReserveCheck') === 'on'
+  })
+
+  revalidatePath(`/org/${orgSlug}/settings/organization`)
+  revalidatePath(`/org/${orgSlug}/finance/dashboard`)
+}
+
+export async function updateMemberTimeLimits(input: UpdateMemberTimeLimitsInput) {
+  const parsed = updateMemberTimeLimitsSchema.parse(input)
+  const member = await requireAdmin(parsed.organizationId)
+  const admin = createAdminClient()
+
+  const { data: orgMember } = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', parsed.organizationId)
+    .eq('user_id', parsed.userId)
+    .eq('status', 'active')
+    .single()
+
+  if (!orgMember) throw new Error('Member not found')
+
+  const { data: current } = await admin
+    .from('profiles')
+    .select('id, daily_time_limit_minutes, weekly_time_limit_minutes')
+    .eq('id', parsed.userId)
+    .single()
+
+  const { error } = await admin
+    .from('profiles')
+    .update({
+      daily_time_limit_minutes: parsed.dailyTimeLimitMinutes,
+      weekly_time_limit_minutes: parsed.weeklyTimeLimitMinutes
+    })
+    .eq('id', parsed.userId)
+
+  if (error) throw new Error(error.message)
+
+  await writeAuditLog({
+    organizationId: parsed.organizationId,
+    actorId: member.user_id,
+    entityType: 'profile',
+    entityId: parsed.userId,
+    action: 'time_limits_updated',
+    oldData: current,
+    newData: {
+      daily_time_limit_minutes: parsed.dailyTimeLimitMinutes,
+      weekly_time_limit_minutes: parsed.weeklyTimeLimitMinutes
+    }
+  })
+}
+
+export async function updateMemberTimeLimitsFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  await updateMemberTimeLimits({
+    organizationId,
+    userId: readString(formData, 'userId'),
+    dailyTimeLimitMinutes: Number(formData.get('dailyTimeLimitMinutes') ?? 480),
+    weeklyTimeLimitMinutes: Number(formData.get('weeklyTimeLimitMinutes') ?? 2400)
+  })
+
+  revalidatePath(`/org/${orgSlug}/settings/members`)
+  revalidatePath(`/org/${orgSlug}/settings/sessions`)
 }
 
 export async function getInvitationPreview(token: string) {

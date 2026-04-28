@@ -42,6 +42,9 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
   return (
     <main className="shell">
       <h1>Tasks</h1>
+      <div className="actions">
+        <a href={`/api/exports/tasks?orgSlug=${orgSlug}`}>Export CSV</a>
+      </div>
       <section className="card">
         <h2>Create task</h2>
         <form className="form" action={createAction}>

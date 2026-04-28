@@ -1,7 +1,5 @@
-import Link from 'next/link'
-
+import { selectOrganizationFromForm } from '@/lib/actions/auth'
 import { listActiveMemberships } from '@/lib/services/permissions'
-import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
 
 export default async function SelectOrganizationPage() {
   const memberships = await listActiveMemberships()
@@ -20,10 +18,14 @@ export default async function SelectOrganizationPage() {
           }
 
           return (
-            <Link className="card" key={membership.id} href={resolveDefaultWorkspaceRoute(organization.slug, membership.role)}>
+            <form className="card" key={membership.id} action={selectOrganizationFromForm}>
+              <input type="hidden" name="organizationId" value={organization.id} />
+              <input type="hidden" name="orgSlug" value={organization.slug} />
+              <input type="hidden" name="role" value={membership.role} />
               <strong>{organization.name}</strong>
               <p className="muted">{membership.role}</p>
-            </Link>
+              <button type="submit">Enter workspace</button>
+            </form>
           )
         })}
       </div>

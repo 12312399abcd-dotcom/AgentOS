@@ -21,6 +21,7 @@ const financeLinks = [
   ['Income Statement', 'income-statement'],
   ['Balance Sheet', 'balance-sheet'],
   ['Business Expenses', 'business-expenses'],
+  ['Payroll', 'payroll'],
   ['Invoices', 'invoices'],
   ['Tax', 'tax'],
   ['Capital / Loans', 'capital-loans'],
@@ -29,6 +30,8 @@ const financeLinks = [
 
 const settingsLinks = [
   ['Members', 'members'],
+  ['Sessions', 'sessions'],
+  ['Audit Logs', 'audit-logs'],
   ['Organization', 'organization']
 ]
 

@@ -2,7 +2,10 @@
 
 import { redirect } from 'next/navigation'
 
+import { requireUser } from '@/lib/services/permissions'
 import { resolvePostLoginRoute } from '@/lib/services/post-login'
+import { startMemberSession } from '@/lib/services/sessions'
+import { resolveDefaultWorkspaceRoute } from '@/lib/services/workspace'
 import { createClient } from '@/lib/supabase/server'
 
 function requiredString(formData: FormData, key: string) {
@@ -74,4 +77,20 @@ export async function signUpWithPassword(formData: FormData) {
   }
 
   redirect('/login?checkEmail=1')
+}
+
+export async function selectOrganizationFromForm(formData: FormData) {
+  const user = await requireUser()
+  const organizationId = requiredString(formData, 'organizationId')
+  const orgSlug = requiredString(formData, 'orgSlug')
+  const role = requiredString(formData, 'role')
+
+  await startMemberSession(organizationId, user.id)
+  redirect(resolveDefaultWorkspaceRoute(orgSlug, role))
+}
+
+export async function signOut() {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  redirect('/login')
 }

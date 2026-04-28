@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
+import { createSimplePdf } from '@/lib/services/pdf'
 import { buildClientReportDraft } from '@/lib/services/report-builder'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -78,6 +79,64 @@ export async function approveReport(input: ApproveReportInput) {
   })
 }
 
+export async function exportReportPdf(organizationId: string, reportId: string) {
+  const member = await requireWorkspaceAccess(organizationId, 'operation')
+  const admin = createAdminClient()
+  const { data: report } = await admin
+    .from('reports')
+    .select('id, report_period, report_type, report_data, notes, clients(name)')
+    .eq('organization_id', organizationId)
+    .eq('id', reportId)
+    .single()
+
+  if (!report) throw new Error('Report not found')
+
+  const client = Array.isArray(report.clients) ? report.clients[0] : report.clients
+  const data = report.report_data as Awaited<ReturnType<typeof buildClientReportDraft>>
+  const lines = [
+    `Agency OS ${report.report_type} report`,
+    `Client: ${client?.name ?? data.client?.name ?? 'Client'}`,
+    `Period: ${report.report_period}`,
+    `Notes: ${report.notes ?? ''}`,
+    '',
+    `Work completed: ${data.workCompleted?.length ?? 0}`,
+    `Content published: ${data.contentPublished?.length ?? 0}`,
+    `Top posts: ${data.topPosts?.length ?? 0}`,
+    '',
+    'Recommendations:',
+    ...(data.recommendations ?? []).map((item) => `- ${item}`),
+    '',
+    'Warnings:',
+    ...((data.warnings ?? []).length > 0 ? data.warnings.map((item) => `- ${item}`) : ['- None'])
+  ]
+  const pdf = createSimplePdf(lines)
+  const path = `${organizationId}/reports/${report.id}.pdf`
+  const { error: uploadError } = await admin.storage.from('reports').upload(path, pdf, {
+    contentType: 'application/pdf',
+    upsert: true
+  })
+
+  if (uploadError) throw new Error(uploadError.message)
+
+  const fileUrl = `storage://reports/${path}`
+  const { error: updateError } = await admin
+    .from('reports')
+    .update({ file_url: fileUrl })
+    .eq('organization_id', organizationId)
+    .eq('id', reportId)
+
+  if (updateError) throw new Error(updateError.message)
+
+  await admin.from('audit_logs').insert({
+    organization_id: organizationId,
+    actor_id: member.user_id,
+    entity_type: 'report',
+    entity_id: reportId,
+    action: 'pdf_exported',
+    new_data: { bucket: 'reports', path }
+  })
+}
+
 export async function generateClientReportFromForm(organizationId: string, orgSlug: string, formData: FormData) {
   await generateClientReport({
     organizationId,
@@ -96,4 +155,12 @@ export async function approveReportFromForm(organizationId: string, orgSlug: str
   })
 
   revalidatePath(`/org/${orgSlug}/operation/reports`)
+}
+
+export async function exportReportPdfFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  const reportId = String(formData.get('reportId') ?? '')
+  await exportReportPdf(organizationId, reportId)
+
+  revalidatePath(`/org/${orgSlug}/operation/reports`)
+  revalidatePath(`/org/${orgSlug}/operation/reports/${reportId}`)
 }

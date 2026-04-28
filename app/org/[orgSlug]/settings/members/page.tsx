@@ -1,4 +1,4 @@
-import { inviteOrganizationMemberFromForm } from '@/lib/actions/organizations'
+import { inviteOrganizationMemberFromForm, updateMemberTimeLimitsFromForm } from '@/lib/actions/organizations'
 import { getOrganizationBySlug, requireAdmin } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -19,7 +19,7 @@ export default async function MembersPage({ params }: MembersPageProps) {
   const [{ data: members }, { data: invitations }] = await Promise.all([
     supabase
       .from('organization_members')
-      .select('id, role, status, profiles(full_name, email)')
+      .select('id, user_id, role, status, profiles(full_name, email, daily_time_limit_minutes, weekly_time_limit_minutes)')
       .eq('organization_id', organization.id)
       .order('created_at', { ascending: true }),
     supabase
@@ -29,6 +29,7 @@ export default async function MembersPage({ params }: MembersPageProps) {
       .order('created_at', { ascending: false })
   ])
   const inviteAction = inviteOrganizationMemberFromForm.bind(null, organization.id)
+  const updateLimitsAction = updateMemberTimeLimitsFromForm.bind(null, organization.id, orgSlug)
 
   return (
     <main className="shell">
@@ -65,6 +66,12 @@ export default async function MembersPage({ params }: MembersPageProps) {
                 <strong>{profile?.full_name ?? profile?.email ?? 'Member'}</strong>
                 <p className="muted">{profile?.email}</p>
                 <p>{member.role}</p>
+                <form className="inline-form" action={updateLimitsAction}>
+                  <input type="hidden" name="userId" value={member.user_id} />
+                  <input name="dailyTimeLimitMinutes" type="number" min="0" defaultValue={profile?.daily_time_limit_minutes ?? 480} aria-label="Daily minutes" />
+                  <input name="weeklyTimeLimitMinutes" type="number" min="0" defaultValue={profile?.weekly_time_limit_minutes ?? 2400} aria-label="Weekly minutes" />
+                  <button type="submit">Save limits</button>
+                </form>
               </div>
             )
           })}

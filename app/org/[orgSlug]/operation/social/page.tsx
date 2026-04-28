@@ -53,6 +53,9 @@ export default async function OperationSocialPage({ params }: OperationSocialPag
   return (
     <main className="shell">
       <h1>Social Tracking</h1>
+      <div className="actions">
+        <a href={`/api/exports/social?orgSlug=${orgSlug}`}>Export CSV</a>
+      </div>
       <div className="grid">
         <div className="card"><strong>Published Posts</strong><p>{posts.length}</p></div>
         <div className="card"><strong>Missing URLs</strong><p>{missingUrl.length}</p></div>
