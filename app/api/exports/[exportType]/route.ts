@@ -173,20 +173,30 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   if (exportType === 'forecast-variance') {
     const month = url.searchParams.get('month') ?? new Date().toISOString().slice(0, 7)
     const bounds = monthBounds(month)
-    const [{ data: items }, { data: cashflow }] = await Promise.all([
-      supabase
-        .from('forecast_budget_items')
-        .select('item_type, category, expected_amount')
-        .eq('organization_id', organization.id)
-        .gte('expected_date', bounds.start)
-        .lt('expected_date', bounds.end),
-      supabase
-        .from('cashflow_transactions')
-        .select('direction, category, amount')
-        .eq('organization_id', organization.id)
-        .gte('transaction_date', bounds.start)
-        .lt('transaction_date', bounds.end)
-    ])
+    let forecastQuery = supabase
+      .from('forecast_budget_items')
+      .select('item_type, category, expected_amount')
+      .eq('organization_id', organization.id)
+      .gte('expected_date', bounds.start)
+      .lt('expected_date', bounds.end)
+    let cashflowQuery = supabase
+      .from('cashflow_transactions')
+      .select('direction, category, amount')
+      .eq('organization_id', organization.id)
+      .gte('transaction_date', bounds.start)
+      .lt('transaction_date', bounds.end)
+
+    if (clientId) {
+      forecastQuery = forecastQuery.eq('client_id', clientId)
+      cashflowQuery = cashflowQuery.eq('client_id', clientId)
+    }
+
+    if (category) {
+      forecastQuery = forecastQuery.ilike('category', `%${category}%`)
+      cashflowQuery = cashflowQuery.ilike('category', `%${category}%`)
+    }
+
+    const [{ data: items }, { data: cashflow }] = await Promise.all([forecastQuery, cashflowQuery])
     const categories = new Set([...(items ?? []).map((item) => item.category), ...(cashflow ?? []).map((row) => row.category)])
     const rows = Array.from(categories).sort().map((category): CsvCell[] => {
       const forecast = (items ?? []).filter((item) => item.category === category).reduce((sum, item) => sum + Number(item.expected_amount), 0)

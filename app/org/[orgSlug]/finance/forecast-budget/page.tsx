@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 
 type ForecastBudgetPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ forecastMonth?: string; status?: string; clientId?: string; category?: string }>
 }
 
 function monthBounds(period: string) {
@@ -18,32 +19,64 @@ function monthBounds(period: string) {
   }
 }
 
-export default async function ForecastBudgetPage({ params }: ForecastBudgetPageProps) {
+export default async function ForecastBudgetPage({ params, searchParams }: ForecastBudgetPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let budgetsQuery = supabase
+    .from('forecast_budgets')
+    .select('id, forecast_month, opening_cash, expected_money_in, expected_money_out, expected_tax_reserve, expected_closing_cash, status, forecast_budget_items(id, item_type, category, description, expected_date, expected_amount, client_id, clients(name))')
+    .eq('organization_id', organization.id)
+    .order('forecast_month', { ascending: false })
+
+  if (filters.forecastMonth) budgetsQuery = budgetsQuery.eq('forecast_month', filters.forecastMonth)
+  if (filters.status) budgetsQuery = budgetsQuery.eq('status', filters.status)
+
   const [{ data: budgets }, { data: clients }] = await Promise.all([
-    supabase
-      .from('forecast_budgets')
-      .select('id, forecast_month, opening_cash, expected_money_in, expected_money_out, expected_tax_reserve, expected_closing_cash, status, forecast_budget_items(id, item_type, category, description, expected_date, expected_amount, clients(name))')
-      .eq('organization_id', organization.id)
-      .order('forecast_month', { ascending: false }),
+    budgetsQuery,
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name')
   ])
   const createAction = createForecastBudgetFromForm.bind(null, organization.id, orgSlug)
   const itemAction = addForecastBudgetItemFromForm.bind(null, organization.id, orgSlug)
   const statusAction = updateForecastStatusFromForm.bind(null, organization.id, orgSlug)
   const defaultMonth = new Date().toISOString().slice(0, 7)
+  const exportMonth = filters.forecastMonth ?? defaultMonth
+  const exportParams = new URLSearchParams({ orgSlug, month: exportMonth })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
+  if (filters.category) exportParams.set('category', filters.category)
 
   return (
     <main className="shell">
       <h1>Forecast Budget</h1>
       <div className="actions">
-        <a href={`/api/exports/forecast-variance?orgSlug=${orgSlug}&month=${defaultMonth}`}>Export Current Month Variance CSV</a>
+        <a href={`/api/exports/forecast-variance?${exportParams.toString()}`}>Export Variance CSV</a>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <input name="forecastMonth" pattern="\d{4}-\d{2}" placeholder="Month" defaultValue={filters.forecastMonth ?? ''} />
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="draft">Draft</option>
+            <option value="submitted">Submitted</option>
+            <option value="approved">Approved</option>
+            <option value="active">Active</option>
+            <option value="closed">Closed</option>
+          </select>
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <input name="category" placeholder="Item category" defaultValue={filters.category ?? ''} />
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Create forecast</h2>
         <form className="form" action={createAction}>
@@ -55,6 +88,11 @@ export default async function ForecastBudgetPage({ params }: ForecastBudgetPageP
       </section>
       {(budgets ?? []).map((budget) => {
         const bounds = monthBounds(budget.forecast_month)
+        const filteredItems = (budget.forecast_budget_items ?? []).filter((item) => {
+          if (filters.clientId && item.client_id !== filters.clientId) return false
+          if (filters.category && !item.category.toLowerCase().includes(filters.category.toLowerCase())) return false
+          return true
+        })
 
         return (
           <section className="card" key={budget.id}>
@@ -113,7 +151,7 @@ export default async function ForecastBudgetPage({ params }: ForecastBudgetPageP
                   </tr>
                 </thead>
                 <tbody>
-                  {(budget.forecast_budget_items ?? []).map((item) => {
+                  {filteredItems.map((item) => {
                     const client = Array.isArray(item.clients) ? item.clients[0] : item.clients
                     return (
                       <tr key={item.id}>
