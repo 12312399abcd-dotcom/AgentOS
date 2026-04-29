@@ -40,7 +40,7 @@ export default async function ContentBoardPage({ params, searchParams }: Content
   return (
     <main className="shell">
       <h1>Content Board</h1>
-      <ContentFilters clients={clients} members={members} />
+      <ContentFilters clients={clients} members={members} filters={filters} />
       <div className="board">
         {statuses.map((status) => (
           <section className="board-column" key={status}>

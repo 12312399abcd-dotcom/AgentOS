@@ -8,26 +8,63 @@ const statuses = ['backlog', 'assigned', 'in_progress', 'review', 'approved', 'c
 
 type TaskBoardPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ clientId?: string; status?: string; requiredRole?: string }>
 }
 
-export default async function TaskBoardPage({ params }: TaskBoardPageProps) {
+export default async function TaskBoardPage({ params, searchParams }: TaskBoardPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
-  const { data: tasks } = await supabase
+  let tasksQuery = supabase
     .from('tasks')
     .select('id, title, status, priority, due_date, task_type, required_role, production_risk, clients(name)')
     .eq('organization_id', organization.id)
     .order('due_date', { ascending: true, nullsFirst: false })
+
+  if (filters.clientId) tasksQuery = tasksQuery.eq('client_id', filters.clientId)
+  if (filters.status) tasksQuery = tasksQuery.eq('status', filters.status)
+  if (filters.requiredRole) tasksQuery = tasksQuery.eq('required_role', filters.requiredRole)
+
+  const [{ data: tasks }, { data: clients }] = await Promise.all([
+    tasksQuery,
+    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name')
+  ])
   const updateAction = updateTaskStatusFromForm.bind(null, organization.id, orgSlug)
 
   return (
     <main className="shell">
       <h1>Task Board</h1>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            {statuses.map((status) => (
+              <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>
+            ))}
+          </select>
+          <select name="requiredRole" defaultValue={filters.requiredRole ?? ''}>
+            <option value="">Any role</option>
+            <option value="designer">Designer</option>
+            <option value="editor">Editor</option>
+            <option value="marketing">Marketing</option>
+            <option value="channel_manager">Channel manager</option>
+            <option value="viewer">Viewer</option>
+          </select>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <div className="board">
         {statuses.map((status) => (
           <section className="board-column" key={status}>

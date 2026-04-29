@@ -25,7 +25,7 @@ export default async function ContentListPage({ params, searchParams }: ContentL
   return (
     <main className="shell">
       <h1>Content List</h1>
-      <ContentFilters clients={clients} members={members} />
+      <ContentFilters clients={clients} members={members} filters={filters} />
       {Object.entries(groups).map(([label, groupItems]) => (
         <section key={label}>
           <h2>{label}</h2>

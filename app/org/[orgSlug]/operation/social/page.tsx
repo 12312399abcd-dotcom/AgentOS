@@ -6,32 +6,43 @@ import { createClient } from '@/lib/supabase/server'
 
 type OperationSocialPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ clientId?: string }>
 }
 
 function engagement(post: { likes: number; comments: number; shares: number; saves: number }) {
   return post.likes + post.comments + post.shares + post.saves
 }
 
-export default async function OperationSocialPage({ params }: OperationSocialPageProps) {
+export default async function OperationSocialPage({ params, searchParams }: OperationSocialPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
-  const [{ data: publishableContent }, { data: socialPosts }] = await Promise.all([
-    supabase
+  let publishableContentQuery = supabase
       .from('content_items')
       .select('id, title, platform, publish_date, status, published_url, clients(name)')
       .eq('organization_id', organization.id)
       .in('status', ['approved', 'ready_to_publish', 'scheduled', 'published'])
-      .order('publish_date', { ascending: true, nullsFirst: false }),
-    supabase
+      .order('publish_date', { ascending: true, nullsFirst: false })
+  let socialPostsQuery = supabase
       .from('social_posts')
       .select('id, channel, published_url, published_at, reach, impressions, likes, comments, shares, saves, clicks, leads, spend, report_period, content_items(title), clients(name)')
       .eq('organization_id', organization.id)
       .order('published_at', { ascending: false, nullsFirst: false })
+
+  if (filters.clientId) {
+    publishableContentQuery = publishableContentQuery.eq('client_id', filters.clientId)
+    socialPostsQuery = socialPostsQuery.eq('client_id', filters.clientId)
+  }
+
+  const [{ data: publishableContent }, { data: socialPosts }, { data: clients }] = await Promise.all([
+    publishableContentQuery,
+    socialPostsQuery,
+    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name')
   ])
   const publishAction = publishContentFromForm.bind(null, organization.id, orgSlug)
   const metricsAction = updateSocialMetricsFromForm.bind(null, organization.id, orgSlug)
@@ -49,13 +60,27 @@ export default async function OperationSocialPage({ params }: OperationSocialPag
   }, {})
   const topByEngagement = [...posts].sort((a, b) => engagement(b) - engagement(a)).slice(0, 5)
   const topByClicks = [...posts].sort((a, b) => b.clicks - a.clicks).slice(0, 5)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
 
   return (
     <main className="shell">
       <h1>Social Tracking</h1>
       <div className="actions">
-        <a href={`/api/exports/social?orgSlug=${orgSlug}`}>Export CSV</a>
+        <a href={`/api/exports/social?${exportParams.toString()}`}>Export CSV</a>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <div className="grid">
         <div className="card"><strong>Published Posts</strong><p>{posts.length}</p></div>
         <div className="card"><strong>Missing URLs</strong><p>{missingUrl.length}</p></div>

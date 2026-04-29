@@ -4,37 +4,88 @@ import { createClient } from '@/lib/supabase/server'
 
 type CashflowPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{
+    clientId?: string
+    direction?: string
+    category?: string
+    businessAccountId?: string
+    start?: string
+    end?: string
+  }>
 }
 
-export default async function CashflowPage({ params }: CashflowPageProps) {
+export default async function CashflowPage({ params, searchParams }: CashflowPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let transactionsQuery = supabase
+    .from('cashflow_transactions')
+    .select('id, transaction_date, direction, category, amount, vendor_name, payee_name, payment_method, notes, business_accounts(account_name), clients(name)')
+    .eq('organization_id', organization.id)
+    .order('transaction_date', { ascending: false })
+    .limit(100)
+
+  if (filters.clientId) transactionsQuery = transactionsQuery.eq('client_id', filters.clientId)
+  if (filters.direction) transactionsQuery = transactionsQuery.eq('direction', filters.direction)
+  if (filters.category) transactionsQuery = transactionsQuery.ilike('category', `%${filters.category}%`)
+  if (filters.businessAccountId) transactionsQuery = transactionsQuery.eq('business_account_id', filters.businessAccountId)
+  if (filters.start) transactionsQuery = transactionsQuery.gte('transaction_date', filters.start)
+  if (filters.end) transactionsQuery = transactionsQuery.lte('transaction_date', filters.end)
+
   const [{ data: accounts }, { data: clients }, { data: transactions }] = await Promise.all([
     supabase.from('business_accounts').select('id, account_name, account_type, currency, opening_balance, status').eq('organization_id', organization.id).order('created_at', { ascending: false }),
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
-    supabase
-      .from('cashflow_transactions')
-      .select('id, transaction_date, direction, category, amount, vendor_name, payee_name, payment_method, notes, business_accounts(account_name), clients(name)')
-      .eq('organization_id', organization.id)
-      .order('transaction_date', { ascending: false })
-      .limit(100)
+    transactionsQuery
   ])
   const accountAction = createBusinessAccountFromForm.bind(null, organization.id, orgSlug)
   const cashflowAction = addCashflowTransactionFromForm.bind(null, organization.id, orgSlug)
   const totalIn = (transactions ?? []).filter((item) => item.direction === 'money_in').reduce((sum, item) => sum + Number(item.amount), 0)
   const totalOut = (transactions ?? []).filter((item) => item.direction === 'money_out').reduce((sum, item) => sum + Number(item.amount), 0)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
+  if (filters.direction) exportParams.set('direction', filters.direction)
+  if (filters.category) exportParams.set('category', filters.category)
+  if (filters.businessAccountId) exportParams.set('businessAccountId', filters.businessAccountId)
+  if (filters.start) exportParams.set('start', filters.start)
+  if (filters.end) exportParams.set('end', filters.end)
 
   return (
     <main className="shell">
       <h1>Cashflow</h1>
       <div className="actions">
-        <a href={`/api/exports/cashflow?orgSlug=${orgSlug}`}>Export CSV</a>
+        <a href={`/api/exports/cashflow?${exportParams.toString()}`}>Export CSV</a>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <select name="direction" defaultValue={filters.direction ?? ''}>
+            <option value="">Any direction</option>
+            <option value="money_in">Money in</option>
+            <option value="money_out">Money out</option>
+          </select>
+          <input name="category" placeholder="Category" defaultValue={filters.category ?? ''} />
+          <select name="businessAccountId" defaultValue={filters.businessAccountId ?? ''}>
+            <option value="">All accounts</option>
+            {(accounts ?? []).map((account) => (
+              <option key={account.id} value={account.id}>{account.account_name}</option>
+            ))}
+          </select>
+          <label>From<input name="start" type="date" defaultValue={filters.start ?? ''} /></label>
+          <label>To<input name="end" type="date" defaultValue={filters.end ?? ''} /></label>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <div className="grid">
         <div className="card"><strong>Total Money In</strong><p>{totalIn.toLocaleString()}</p></div>
         <div className="card"><strong>Total Money Out</strong><p>{totalOut.toLocaleString()}</p></div>

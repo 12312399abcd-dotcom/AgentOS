@@ -24,9 +24,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const overdueIds = (expenses ?? []).filter((expense) => expense.due_date && expense.due_date < today).map((expense) => expense.id)
-  if (overdueIds.length > 0) {
-    await admin.from('business_expenses').update({ status: 'overdue' }).in('id', overdueIds)
+  const overdueExpenses = (expenses ?? []).filter((expense) => expense.due_date && expense.due_date < today)
+  if (overdueExpenses.length > 0) {
+    for (const expense of overdueExpenses) {
+      const { error: updateError } = await admin
+        .from('business_expenses')
+        .update({ status: 'overdue' })
+        .eq('organization_id', expense.organization_id)
+        .eq('id', expense.id)
+
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+    }
   }
 
   const notifications = []
@@ -47,5 +57,5 @@ export async function GET(req: Request) {
 
   await createNotifications(notifications)
 
-  return NextResponse.json({ checked: expenses?.length ?? 0, overdue: overdueIds.length, notifications: notifications.length })
+  return NextResponse.json({ checked: expenses?.length ?? 0, overdue: overdueExpenses.length, notifications: notifications.length })
 }

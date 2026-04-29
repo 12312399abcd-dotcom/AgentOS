@@ -102,6 +102,8 @@ This plan validates the MVP against the roadmap security model:
 6. Daily cashflow review warns finance when cash is below reserve.
 7. Payroll readiness cron warns when payroll threatens reserve.
 8. Session summary cron warns admins when daily session limit is reached.
+9. Cron update operations are scoped by `organization_id`.
+10. Weekly report cron does not create duplicate drafts for the same client and ISO week.
 
 ## Storage Tests
 

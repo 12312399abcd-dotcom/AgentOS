@@ -5,23 +5,32 @@ import { createClient } from '@/lib/supabase/server'
 
 type FinanceInvoicesPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ clientId?: string; status?: string; dueStart?: string; dueEnd?: string }>
 }
 
-export default async function FinanceInvoicesPage({ params }: FinanceInvoicesPageProps) {
+export default async function FinanceInvoicesPage({ params, searchParams }: FinanceInvoicesPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let invoicesQuery = supabase
+    .from('invoices')
+    .select('id, invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, sent_at, paid_at, file_url, clients(name), invoice_items(description, quantity, unit_price, line_total)')
+    .eq('organization_id', organization.id)
+    .order('created_at', { ascending: false })
+
+  if (filters.clientId) invoicesQuery = invoicesQuery.eq('client_id', filters.clientId)
+  if (filters.status) invoicesQuery = invoicesQuery.eq('status', filters.status)
+  if (filters.dueStart) invoicesQuery = invoicesQuery.gte('due_date', filters.dueStart)
+  if (filters.dueEnd) invoicesQuery = invoicesQuery.lte('due_date', filters.dueEnd)
+
   const [{ data: clients }, { data: accounts }, { data: invoices }] = await Promise.all([
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
     supabase.from('business_accounts').select('id, account_name').eq('organization_id', organization.id).eq('status', 'active').order('account_name'),
-    supabase
-      .from('invoices')
-      .select('id, invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, sent_at, paid_at, file_url, clients(name), invoice_items(description, quantity, unit_price, line_total)')
-      .eq('organization_id', organization.id)
-      .order('created_at', { ascending: false })
+    invoicesQuery
   ])
   const createAction = createInvoiceFromForm.bind(null, organization.id, orgSlug)
   const statusAction = updateInvoiceStatusFromForm.bind(null, organization.id, orgSlug)
@@ -37,6 +46,29 @@ export default async function FinanceInvoicesPage({ params }: FinanceInvoicesPag
         <div className="card"><strong>Unpaid Invoices</strong><p>{unpaid.length}</p></div>
         <div className="card"><strong>Accounts Receivable</strong><p>{accountsReceivable.toLocaleString()}</p></div>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="partial_paid">Partial paid</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <label>Due from<input name="dueStart" type="date" defaultValue={filters.dueStart ?? ''} /></label>
+          <label>Due to<input name="dueEnd" type="date" defaultValue={filters.dueEnd ?? ''} /></label>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Create invoice</h2>
         <form className="form" action={createAction}>

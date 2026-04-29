@@ -9,21 +9,28 @@ import { createClient } from '@/lib/supabase/server'
 
 type PayrollPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ periodMonth?: string; status?: string }>
 }
 
-export default async function PayrollPage({ params }: PayrollPageProps) {
+export default async function PayrollPage({ params, searchParams }: PayrollPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let cyclesQuery = supabase
+    .from('payroll_cycles')
+    .select('id, period_month, payroll_due_date, total_gross_pay, total_net_pay, tax_withholding, status, paid_at, payroll_items(id, payee_name, payee_type, gross_amount, tax_amount, net_amount, payment_status, paid_date, profiles(full_name, email))')
+    .eq('organization_id', organization.id)
+    .order('period_month', { ascending: false })
+
+  if (filters.periodMonth) cyclesQuery = cyclesQuery.eq('period_month', filters.periodMonth)
+  if (filters.status) cyclesQuery = cyclesQuery.eq('status', filters.status)
+
   const [{ data: cycles }, { data: members }, { data: accounts }, { data: settings }, { data: transactions }] = await Promise.all([
-    supabase
-      .from('payroll_cycles')
-      .select('id, period_month, payroll_due_date, total_gross_pay, total_net_pay, tax_withholding, status, paid_at, payroll_items(id, payee_name, payee_type, gross_amount, tax_amount, net_amount, payment_status, paid_date, profiles(full_name, email))')
-      .eq('organization_id', organization.id)
-      .order('period_month', { ascending: false }),
+    cyclesQuery,
     supabase
       .from('organization_members')
       .select('user_id, role, profiles(full_name, email)')
@@ -60,6 +67,22 @@ export default async function PayrollPage({ params }: PayrollPageProps) {
         <div className="card"><strong>Minimum Reserve</strong><p>{minimumReserve.toLocaleString()}</p></div>
         <div className="card"><strong>Payroll Risk</strong><p>{payrollRisk}</p></div>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <input name="periodMonth" pattern="\d{4}-\d{2}" placeholder="Month" defaultValue={filters.periodMonth ?? ''} />
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="planned">Planned</option>
+            <option value="reserved">Reserved</option>
+            <option value="approved">Approved</option>
+            <option value="paid">Paid</option>
+            <option value="partial_paid">Partial paid</option>
+            <option value="blocked">Blocked</option>
+          </select>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Create payroll cycle</h2>
         <form className="form" action={createAction}>

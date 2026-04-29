@@ -28,7 +28,7 @@ export default async function ContentCalendarPage({ params, searchParams }: Cont
   return (
     <main className="shell">
       <h1>Content Calendar</h1>
-      <ContentFilters clients={clients} members={members} />
+      <ContentFilters clients={clients} members={members} filters={filters} />
       <section className="card">
         <h2>Schedule content</h2>
         <form className="form" action={scheduleAction}>

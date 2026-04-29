@@ -33,8 +33,17 @@ export async function GET(req: Request) {
 
   for (const forecast of forecasts ?? []) {
     const bounds = monthBounds(forecast.forecast_month)
-    await admin.from('forecast_budgets').update({ status: 'active' }).eq('id', forecast.id)
-    await admin.from('financial_periods').upsert({
+    const { error: updateError } = await admin
+      .from('forecast_budgets')
+      .update({ status: 'active' })
+      .eq('organization_id', forecast.organization_id)
+      .eq('id', forecast.id)
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    const { error: periodError } = await admin.from('financial_periods').upsert({
       organization_id: forecast.organization_id,
       period_month: forecast.forecast_month,
       period_start: bounds.start,
@@ -44,6 +53,10 @@ export async function GET(req: Request) {
       projected_closing_cash: forecast.expected_closing_cash,
       status: 'open'
     })
+
+    if (periodError) {
+      return NextResponse.json({ error: periodError.message }, { status: 500 })
+    }
 
     const organization = Array.isArray(forecast.organizations) ? forecast.organizations[0] : forecast.organizations
     const recipients = await listFinanceRecipientIds(forecast.organization_id)

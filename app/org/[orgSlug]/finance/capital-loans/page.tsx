@@ -4,22 +4,30 @@ import { createClient } from '@/lib/supabase/server'
 
 type CapitalLoansPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ transactionType?: string; start?: string; end?: string }>
 }
 
-export default async function CapitalLoansPage({ params }: CapitalLoansPageProps) {
+export default async function CapitalLoansPage({ params, searchParams }: CapitalLoansPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let transactionsQuery = supabase
+    .from('capital_transactions')
+    .select('id, transaction_date, transaction_type, amount, counterparty, notes, created_at')
+    .eq('organization_id', organization.id)
+    .order('transaction_date', { ascending: false })
+    .limit(100)
+
+  if (filters.transactionType) transactionsQuery = transactionsQuery.eq('transaction_type', filters.transactionType)
+  if (filters.start) transactionsQuery = transactionsQuery.gte('transaction_date', filters.start)
+  if (filters.end) transactionsQuery = transactionsQuery.lte('transaction_date', filters.end)
+
   const [{ data: transactions }, { data: accounts }, { data: settings }] = await Promise.all([
-    supabase
-      .from('capital_transactions')
-      .select('id, transaction_date, transaction_type, amount, counterparty, notes, created_at')
-      .eq('organization_id', organization.id)
-      .order('transaction_date', { ascending: false })
-      .limit(100),
+    transactionsQuery,
     supabase
       .from('business_accounts')
       .select('id, account_name')
@@ -52,6 +60,22 @@ export default async function CapitalLoansPage({ params }: CapitalLoansPageProps
         <div className="card"><strong>Outstanding Debt</strong><p>{outstandingDebt.toLocaleString()}</p></div>
         <div className="card"><strong>Dividend Distributions</strong><p>{dividends.toLocaleString()}</p></div>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="transactionType" defaultValue={filters.transactionType ?? ''}>
+            <option value="">Any type</option>
+            <option value="owner_capital_injection">Owner capital injection</option>
+            <option value="owner_draw">Owner draw</option>
+            <option value="loan_received">Loan received</option>
+            <option value="loan_repayment">Loan repayment</option>
+            <option value="dividend_distribution">Dividend distribution</option>
+          </select>
+          <label>From<input name="start" type="date" defaultValue={filters.start ?? ''} /></label>
+          <label>To<input name="end" type="date" defaultValue={filters.end ?? ''} /></label>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Add capital transaction</h2>
         <form className="form" action={addAction}>

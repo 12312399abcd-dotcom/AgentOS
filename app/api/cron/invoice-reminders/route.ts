@@ -36,10 +36,17 @@ export async function GET(req: Request) {
   }
 
   if ((overdueInvoices ?? []).length > 0) {
-    await admin
-      .from('invoices')
-      .update({ status: 'overdue' })
-      .in('id', overdueInvoices!.map((invoice) => invoice.id))
+    for (const invoice of overdueInvoices ?? []) {
+      const { error: updateError } = await admin
+        .from('invoices')
+        .update({ status: 'overdue' })
+        .eq('organization_id', invoice.organization_id)
+        .eq('id', invoice.id)
+
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+    }
   }
 
   const notifications = []

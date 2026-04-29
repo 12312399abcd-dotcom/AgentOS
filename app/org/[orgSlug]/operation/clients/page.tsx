@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 
 type OperationClientsPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ search?: string; category?: string; status?: string }>
 }
 
-export default async function OperationClientsPage({ params }: OperationClientsPageProps) {
+export default async function OperationClientsPage({ params, searchParams }: OperationClientsPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) {
@@ -16,12 +18,22 @@ export default async function OperationClientsPage({ params }: OperationClientsP
 
   const member = await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
+  let clientsQuery = supabase
+    .from('clients')
+    .select('id, name, category, contact_name, contact_email, monthly_retainer, status')
+    .eq('organization_id', organization.id)
+    .order('created_at', { ascending: false })
+
+  if (filters.search) {
+    const searchTerm = filters.search.replaceAll(',', ' ')
+    clientsQuery = clientsQuery.or(`name.ilike.%${searchTerm}%,contact_name.ilike.%${searchTerm}%,contact_email.ilike.%${searchTerm}%`)
+  }
+
+  if (filters.category) clientsQuery = clientsQuery.ilike('category', `%${filters.category}%`)
+  if (filters.status) clientsQuery = clientsQuery.eq('status', filters.status)
+
   const [{ data: clients }, { data: members }] = await Promise.all([
-    supabase
-      .from('clients')
-      .select('id, name, category, contact_name, contact_email, monthly_retainer, status')
-      .eq('organization_id', organization.id)
-      .order('created_at', { ascending: false }),
+    clientsQuery,
     supabase
       .from('organization_members')
       .select('user_id, role, profiles(full_name, email)')
@@ -86,6 +98,20 @@ export default async function OperationClientsPage({ params }: OperationClientsP
           </form>
         </section>
       ) : null}
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <input name="search" placeholder="Search client" defaultValue={filters.search ?? ''} />
+          <input name="category" placeholder="Category" defaultValue={filters.category ?? ''} />
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="archived">Archived</option>
+          </select>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section>
         <h2>Client list</h2>
         <div className="grid">

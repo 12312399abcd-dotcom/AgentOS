@@ -6,10 +6,12 @@ import { createClient } from '@/lib/supabase/server'
 
 type OperationTasksPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ clientId?: string; status?: string; requiredRole?: string }>
 }
 
-export default async function OperationTasksPage({ params }: OperationTasksPageProps) {
+export default async function OperationTasksPage({ params, searchParams }: OperationTasksPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) {
@@ -18,12 +20,18 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
 
   await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
+  let tasksQuery = supabase
+    .from('tasks')
+    .select('id, title, status, priority, due_date, task_type, required_role, clients(name), content_items(title)')
+    .eq('organization_id', organization.id)
+    .order('due_date', { ascending: true, nullsFirst: false })
+
+  if (filters.clientId) tasksQuery = tasksQuery.eq('client_id', filters.clientId)
+  if (filters.status) tasksQuery = tasksQuery.eq('status', filters.status)
+  if (filters.requiredRole) tasksQuery = tasksQuery.eq('required_role', filters.requiredRole)
+
   const [{ data: tasks }, { data: clients }, { data: members }, { data: contentItems }] = await Promise.all([
-    supabase
-      .from('tasks')
-      .select('id, title, status, priority, due_date, task_type, required_role, clients(name), content_items(title)')
-      .eq('organization_id', organization.id)
-      .order('due_date', { ascending: true, nullsFirst: false }),
+    tasksQuery,
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
     supabase
       .from('organization_members')
@@ -38,13 +46,48 @@ export default async function OperationTasksPage({ params }: OperationTasksPageP
   ])
   const createAction = createTaskFromForm.bind(null, organization.id, orgSlug)
   const updateAction = updateTaskStatusFromForm.bind(null, organization.id, orgSlug)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
+  if (filters.status) exportParams.set('status', filters.status)
+  if (filters.requiredRole) exportParams.set('requiredRole', filters.requiredRole)
 
   return (
     <main className="shell">
       <h1>Tasks</h1>
       <div className="actions">
-        <a href={`/api/exports/tasks?orgSlug=${orgSlug}`}>Export CSV</a>
+        <a href={`/api/exports/tasks?${exportParams.toString()}`}>Export CSV</a>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="backlog">Backlog</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In progress</option>
+            <option value="review">Review</option>
+            <option value="approved">Approved</option>
+            <option value="completed">Completed</option>
+            <option value="blocked">Blocked</option>
+            <option value="archived">Archived</option>
+          </select>
+          <select name="requiredRole" defaultValue={filters.requiredRole ?? ''}>
+            <option value="">Any role</option>
+            <option value="designer">Designer</option>
+            <option value="editor">Editor</option>
+            <option value="marketing">Marketing</option>
+            <option value="channel_manager">Channel manager</option>
+            <option value="viewer">Viewer</option>
+          </select>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Create task</h2>
         <form className="form" action={createAction}>

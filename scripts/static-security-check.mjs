@@ -25,6 +25,10 @@ for (const file of files) {
     findings.push(`${rel}: cron route does not call verifyCron(req)`)
   }
 
+  if (rel.startsWith('app/api/cron/') && text.includes('.update(') && !text.includes(".eq('organization_id'")) {
+    findings.push(`${rel}: cron route updates rows without an obvious organization_id filter`)
+  }
+
   if (rel.startsWith('app/api/') && text.includes('requireWorkspaceAccess')) {
     findings.push(`${rel}: API route should use getWorkspaceAccess and return JSON errors instead of redirect guards`)
   }

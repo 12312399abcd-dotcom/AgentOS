@@ -30,7 +30,7 @@ export default async function ContentTimelinePage({ params, searchParams }: Cont
   return (
     <main className="shell">
       <h1>Content Timeline</h1>
-      <ContentFilters clients={clients} members={members} />
+      <ContentFilters clients={clients} members={members} filters={filters} />
       <div className="timeline">
         {items.map((item) => (
           <article className="card" key={item.id}>

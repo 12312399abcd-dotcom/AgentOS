@@ -4,23 +4,33 @@ import { createClient } from '@/lib/supabase/server'
 
 type BusinessExpensesPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ clientId?: string; status?: string; category?: string; start?: string; end?: string }>
 }
 
-export default async function BusinessExpensesPage({ params }: BusinessExpensesPageProps) {
+export default async function BusinessExpensesPage({ params, searchParams }: BusinessExpensesPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let expensesQuery = supabase
+    .from('business_expenses')
+    .select('id, expense_date, due_date, paid_date, category, vendor_name, description, amount, tax_amount, total_amount, status, clients(name)')
+    .eq('organization_id', organization.id)
+    .order('expense_date', { ascending: false })
+    .limit(100)
+
+  if (filters.clientId) expensesQuery = expensesQuery.eq('client_id', filters.clientId)
+  if (filters.status) expensesQuery = expensesQuery.eq('status', filters.status)
+  if (filters.category) expensesQuery = expensesQuery.ilike('category', `%${filters.category}%`)
+  if (filters.start) expensesQuery = expensesQuery.gte('expense_date', filters.start)
+  if (filters.end) expensesQuery = expensesQuery.lte('expense_date', filters.end)
+
   const [{ data: expenses }, { data: clients }, { data: accounts }] = await Promise.all([
-    supabase
-      .from('business_expenses')
-      .select('id, expense_date, due_date, paid_date, category, vendor_name, description, amount, tax_amount, total_amount, status, clients(name)')
-      .eq('organization_id', organization.id)
-      .order('expense_date', { ascending: false })
-      .limit(100),
+    expensesQuery,
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
     supabase.from('business_accounts').select('id, account_name').eq('organization_id', organization.id).eq('status', 'active').order('account_name')
   ])
@@ -36,6 +46,29 @@ export default async function BusinessExpensesPage({ params }: BusinessExpensesP
         <div className="card"><strong>Open Expenses</strong><p>{unpaid.length}</p></div>
         <div className="card"><strong>Accounts Payable</strong><p>{totalPayable.toLocaleString()}</p></div>
       </div>
+      <section>
+        <h2>Filters</h2>
+        <form className="filter-bar">
+          <select name="clientId" defaultValue={filters.clientId ?? ''}>
+            <option value="">All clients</option>
+            {(clients ?? []).map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
+          <select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">Any status</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <input name="category" placeholder="Category" defaultValue={filters.category ?? ''} />
+          <label>From<input name="start" type="date" defaultValue={filters.start ?? ''} /></label>
+          <label>To<input name="end" type="date" defaultValue={filters.end ?? ''} /></label>
+          <button type="submit">Filter</button>
+        </form>
+      </section>
       <section className="card">
         <h2>Add expense</h2>
         <form className="form" action={addExpenseAction}>

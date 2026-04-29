@@ -25,9 +25,9 @@ export default async function ContentTablePage({ params, searchParams }: Content
     <main className="shell">
       <h1>Content Table</h1>
       <div className="actions">
-        <a href={`/api/exports/content?orgSlug=${orgSlug}`}>Export CSV</a>
+        <a href={`/api/exports/content?${new URLSearchParams({ orgSlug, ...Object.fromEntries(Object.entries(filters).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }).toString()}`}>Export CSV</a>
       </div>
-      <ContentFilters clients={clients} members={members} />
+      <ContentFilters clients={clients} members={members} filters={filters} />
       <div className="table-wrap">
         <table>
           <thead>

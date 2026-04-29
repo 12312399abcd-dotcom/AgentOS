@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { csvResponse, toCsv, type CsvCell } from '@/lib/services/csv'
+import { getContentItems, parseContentFilters } from '@/lib/services/content-queries'
 import { getStatementRange, calculateIncomeStatement } from '@/lib/services/finance-statements'
 import { getOrganizationBySlug, getWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
@@ -53,15 +54,18 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
 
   const supabase = await createClient()
   const stamp = new Date().toISOString().slice(0, 10)
+  const clientId = url.searchParams.get('clientId')
+  const status = url.searchParams.get('status')
+  const requiredRole = url.searchParams.get('requiredRole')
+  const direction = url.searchParams.get('direction')
+  const category = url.searchParams.get('category')
+  const businessAccountId = url.searchParams.get('businessAccountId')
+  const start = url.searchParams.get('start')
+  const end = url.searchParams.get('end')
 
   if (exportType === 'content') {
-    const { data } = await supabase
-      .from('content_items')
-      .select('title, platform, content_type, status, publish_date, published_url, production_risk, clients(name)')
-      .eq('organization_id', organization.id)
-      .order('publish_date', { ascending: true, nullsFirst: false })
-
-    const rows = (data ?? []).map((item): CsvCell[] => [
+    const items = await getContentItems(organization.id, parseContentFilters(Object.fromEntries(url.searchParams)))
+    const rows = items.map((item): CsvCell[] => [
       item.title,
       getClientName(item.clients),
       item.platform,
@@ -76,11 +80,17 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   }
 
   if (exportType === 'tasks') {
-    const { data } = await supabase
+    let query = supabase
       .from('tasks')
       .select('title, task_type, required_role, status, priority, due_date, production_risk, clients(name)')
       .eq('organization_id', organization.id)
       .order('due_date', { ascending: true, nullsFirst: false })
+
+    if (clientId) query = query.eq('client_id', clientId)
+    if (status) query = query.eq('status', status)
+    if (requiredRole) query = query.eq('required_role', requiredRole)
+
+    const { data } = await query
 
     const rows = (data ?? []).map((task): CsvCell[] => [
       task.title,
@@ -97,11 +107,20 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   }
 
   if (exportType === 'social') {
-    const { data } = await supabase
+    let query = supabase
       .from('social_posts')
       .select('channel, published_url, published_at, reach, impressions, likes, comments, shares, saves, clicks, leads, spend, report_period, clients(name)')
       .eq('organization_id', organization.id)
       .order('published_at', { ascending: false, nullsFirst: false })
+
+    if (clientId) query = query.eq('client_id', clientId)
+    if (direction) query = query.eq('direction', direction)
+    if (category) query = query.ilike('category', `%${category}%`)
+    if (businessAccountId) query = query.eq('business_account_id', businessAccountId)
+    if (start) query = query.gte('transaction_date', start)
+    if (end) query = query.lte('transaction_date', end)
+
+    const { data } = await query
 
     const rows = (data ?? []).map((post): CsvCell[] => [
       getClientName(post.clients),
@@ -124,11 +143,15 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   }
 
   if (exportType === 'cashflow') {
-    const { data } = await supabase
+    let query = supabase
       .from('cashflow_transactions')
       .select('transaction_date, direction, category, amount, vendor_name, payee_name, payment_method, notes, clients(name), business_accounts(account_name)')
       .eq('organization_id', organization.id)
       .order('transaction_date', { ascending: false })
+
+    if (clientId) query = query.eq('client_id', clientId)
+
+    const { data } = await query
 
     const rows = (data ?? []).map((transaction): CsvCell[] => {
       const account = Array.isArray(transaction.business_accounts) ? transaction.business_accounts[0] : transaction.business_accounts

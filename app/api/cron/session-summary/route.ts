@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   }
 
   const notifications = []
-  const warningSessionIds = []
+  const warningSessions: { id: string; organizationId: string }[] = []
 
   for (const session of sessions ?? []) {
     const profile = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
     if (Number(session.active_minutes) < limit) continue
 
-    warningSessionIds.push(session.id)
+    warningSessions.push({ id: session.id, organizationId: session.organization_id })
     const admins = await listAdminRecipientIds(session.organization_id)
     notifications.push(...admins.map((userId) => ({
       organizationId: session.organization_id,
@@ -44,11 +44,21 @@ export async function GET(req: Request) {
     })))
   }
 
-  if (warningSessionIds.length > 0) {
-    await admin.from('member_sessions').update({ status: 'warning' }).in('id', warningSessionIds)
+  if (warningSessions.length > 0) {
+    for (const session of warningSessions) {
+      const { error: updateError } = await admin
+        .from('member_sessions')
+        .update({ status: 'warning' })
+        .eq('organization_id', session.organizationId)
+        .eq('id', session.id)
+
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+    }
   }
 
   await createNotifications(notifications)
 
-  return NextResponse.json({ sessions: sessions?.length ?? 0, warnings: warningSessionIds.length, notifications: notifications.length })
+  return NextResponse.json({ sessions: sessions?.length ?? 0, warnings: warningSessions.length, notifications: notifications.length })
 }
