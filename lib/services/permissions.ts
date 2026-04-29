@@ -97,6 +97,24 @@ export async function requireWorkspaceAccess(orgId: string, workspace: Workspace
   return member
 }
 
+export async function getWorkspaceAccess(orgId: string, workspace: Workspace) {
+  const member = await getCurrentOrgMember(orgId)
+
+  if (!member) {
+    return { member: null, error: 'No organization access', status: 401 }
+  }
+
+  if (workspace === 'operation' && !canAccessOperation(member.role)) {
+    return { member: null, error: 'No operation access', status: 403 }
+  }
+
+  if (workspace === 'finance' && !canAccessFinance(member.role)) {
+    return { member: null, error: 'No finance access', status: 403 }
+  }
+
+  return { member, error: null, status: 200 }
+}
+
 export async function requireAdmin(orgId: string) {
   const member = await requireOrgAccess(orgId)
 

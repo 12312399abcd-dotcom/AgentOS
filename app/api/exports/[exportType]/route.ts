@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { csvResponse, toCsv, type CsvCell } from '@/lib/services/csv'
 import { getStatementRange, calculateIncomeStatement } from '@/lib/services/finance-statements'
-import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
+import { getOrganizationBySlug, getWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
 type ExportRouteProps = {
@@ -42,9 +42,11 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   }
 
   if (operationExports.has(exportType)) {
-    await requireWorkspaceAccess(organization.id, 'operation')
+    const access = await getWorkspaceAccess(organization.id, 'operation')
+    if (!access.member) return NextResponse.json({ error: access.error }, { status: access.status })
   } else if (financeExports.has(exportType)) {
-    await requireWorkspaceAccess(organization.id, 'finance')
+    const access = await getWorkspaceAccess(organization.id, 'finance')
+    if (!access.member) return NextResponse.json({ error: access.error }, { status: access.status })
   } else {
     return NextResponse.json({ error: 'Unsupported export type' }, { status: 404 })
   }

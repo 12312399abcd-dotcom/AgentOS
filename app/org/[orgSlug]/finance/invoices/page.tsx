@@ -105,7 +105,6 @@ export default async function FinanceInvoicesPage({ params }: FinanceInvoicesPag
                           <option value="draft">Draft</option>
                           <option value="sent">Sent</option>
                           <option value="partial_paid">Partial paid</option>
-                          <option value="paid">Paid</option>
                           <option value="overdue">Overdue</option>
                           <option value="cancelled">Cancelled</option>
                         </select>

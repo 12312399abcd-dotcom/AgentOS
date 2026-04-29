@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { buildProductionTasks, calculateProductionRisk } from '@/lib/services/content-booking'
-import { requireWorkspaceAccess } from '@/lib/services/permissions'
+import { getWorkspaceAccess } from '@/lib/services/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const contentStatuses = [
@@ -145,7 +145,13 @@ async function createMissingProductionTasks(
 
 export async function POST(req: Request) {
   const body = notionSyncSchema.parse(await req.json())
-  const member = await requireWorkspaceAccess(body.organizationId, 'operation')
+  const access = await getWorkspaceAccess(body.organizationId, 'operation')
+
+  if (!access.member) {
+    return NextResponse.json({ error: access.error }, { status: access.status })
+  }
+
+  const member = access.member
 
   if (!['admin', 'marketing', 'channel_manager'].includes(member.role)) {
     return NextResponse.json({ error: 'Notion sync requires Admin, Marketing, or Channel Manager access' }, { status: 403 })

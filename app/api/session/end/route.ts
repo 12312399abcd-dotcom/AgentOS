@@ -8,7 +8,13 @@ const endSessionSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const body = endSessionSchema.parse(await req.json())
-  await endCurrentMemberSession(body.organizationId)
-  return NextResponse.json({ ok: true })
+  try {
+    const body = endSessionSchema.parse(await req.json())
+    await endCurrentMemberSession(body.organizationId)
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Session end failed'
+    const status = message === 'Unauthorized' ? 401 : message === 'No organization access' ? 403 : 400
+    return NextResponse.json({ error: message }, { status })
+  }
 }

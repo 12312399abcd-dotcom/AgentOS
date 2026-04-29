@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { assertFinancialPeriodEditable } from '@/lib/services/financial-periods'
 import { requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -191,6 +192,7 @@ export async function payPayrollCycle(input: PayPayrollCycleInput) {
 
   if (!cycle) throw new Error('Payroll cycle not found')
   if (!['approved', 'partial_paid'].includes(cycle.status)) throw new Error('Payroll must be approved before payment')
+  await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.paidDate)
 
   const currentCash = await getCurrentCash(admin, parsed.organizationId)
   const payrollDue = (items ?? []).reduce((sum, item) => sum + Number(item.net_amount), 0)

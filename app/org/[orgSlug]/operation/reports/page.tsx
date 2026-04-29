@@ -27,6 +27,7 @@ export default async function OperationReportsPage({ params, searchParams }: Ope
   if (filters.clientId) reportsQuery = reportsQuery.eq('client_id', filters.clientId)
   if (filters.reportPeriod) reportsQuery = reportsQuery.eq('report_period', filters.reportPeriod)
   if (filters.status) reportsQuery = reportsQuery.eq('status', filters.status)
+  if (member.role === 'viewer') reportsQuery = reportsQuery.eq('status', 'approved')
 
   const [{ data: clients }, { data: reports }] = await Promise.all([
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
@@ -39,29 +40,31 @@ export default async function OperationReportsPage({ params, searchParams }: Ope
   return (
     <main className="shell">
       <h1>Reports</h1>
-      <section className="card">
-        <h2>Generate report draft</h2>
-        <form className="form" action={generateAction}>
-          <label>
-            Client
-            <select name="clientId" required defaultValue="">
-              <option value="" disabled>Select client</option>
-              {(clients ?? []).map((client) => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Report period
-            <input name="reportPeriod" required pattern="\d{4}-\d{2}" defaultValue={defaultPeriod} />
-          </label>
-          <label>
-            Notes
-            <textarea name="notes" rows={3} />
-          </label>
-          <button type="submit">Generate draft</button>
-        </form>
-      </section>
+      {['admin', 'marketing', 'channel_manager'].includes(member.role) ? (
+        <section className="card">
+          <h2>Generate report draft</h2>
+          <form className="form" action={generateAction}>
+            <label>
+              Client
+              <select name="clientId" required defaultValue="">
+                <option value="" disabled>Select client</option>
+                {(clients ?? []).map((client) => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Report period
+              <input name="reportPeriod" required pattern="\d{4}-\d{2}" defaultValue={defaultPeriod} />
+            </label>
+            <label>
+              Notes
+              <textarea name="notes" rows={3} />
+            </label>
+            <button type="submit">Generate draft</button>
+          </form>
+        </section>
+      ) : null}
       <section>
         <h2>Filters</h2>
         <form className="filter-bar">
@@ -72,13 +75,15 @@ export default async function OperationReportsPage({ params, searchParams }: Ope
             ))}
           </select>
           <input name="reportPeriod" placeholder="2026-04" defaultValue={filters.reportPeriod ?? ''} />
-          <select name="status" defaultValue={filters.status ?? ''}>
-            <option value="">Any status</option>
-            <option value="draft">Draft</option>
-            <option value="approved">Approved</option>
-            <option value="sent">Sent</option>
-            <option value="archived">Archived</option>
-          </select>
+          {member.role !== 'viewer' ? (
+            <select name="status" defaultValue={filters.status ?? ''}>
+              <option value="">Any status</option>
+              <option value="draft">Draft</option>
+              <option value="approved">Approved</option>
+              <option value="sent">Sent</option>
+              <option value="archived">Archived</option>
+            </select>
+          ) : null}
           <button type="submit">Filter</button>
         </form>
       </section>

@@ -136,9 +136,21 @@ export async function calculateBalanceSheet(organizationId: string, range: State
     calculateIncomeStatement(organizationId, range),
     supabase.from('business_accounts').select('opening_balance, account_type').eq('organization_id', organizationId).eq('status', 'active'),
     supabase.from('cashflow_transactions').select('direction, category, amount').eq('organization_id', organizationId).lt('transaction_date', range.end),
-    supabase.from('invoices').select('status, total_amount').eq('organization_id', organizationId),
-    supabase.from('business_expenses').select('status, category, total_amount').eq('organization_id', organizationId),
-    supabase.from('payroll_cycles').select('status, total_net_pay, tax_withholding').eq('organization_id', organizationId),
+    supabase
+      .from('invoices')
+      .select('status, total_amount, sent_at, paid_at, created_at')
+      .eq('organization_id', organizationId)
+      .lt('created_at', `${range.end}T00:00:00.000Z`),
+    supabase
+      .from('business_expenses')
+      .select('status, category, total_amount, expense_date, paid_date')
+      .eq('organization_id', organizationId)
+      .lt('expense_date', range.end),
+    supabase
+      .from('payroll_cycles')
+      .select('status, total_net_pay, tax_withholding, payroll_due_date, paid_at')
+      .eq('organization_id', organizationId)
+      .lt('payroll_due_date', range.end),
     supabase.from('capital_transactions').select('transaction_type, amount').eq('organization_id', organizationId).lt('transaction_date', range.end)
   ])
 
@@ -155,16 +167,36 @@ export async function calculateBalanceSheet(organizationId: string, range: State
   const moneyOut = cashflow.filter((row) => row.direction === 'money_out').reduce((sum, row) => sum + Number(row.amount), 0)
   const cash = openingCash + moneyIn - moneyOut
   const accountsReceivable = invoices
-    .filter((invoice) => ['sent', 'partial_paid', 'overdue'].includes(invoice.status))
+    .filter((invoice) => {
+      const wasIssued = Boolean(invoice.sent_at) || ['sent', 'partial_paid', 'overdue', 'paid'].includes(invoice.status)
+      const paidAfterSnapshot = invoice.paid_at ? invoice.paid_at >= `${range.end}T00:00:00.000Z` : true
+      return wasIssued && invoice.status !== 'cancelled' && paidAfterSnapshot
+    })
     .reduce((sum, invoice) => sum + Number(invoice.total_amount), 0)
   const accountsPayable = expenses
-    .filter((expense) => ['unpaid', 'scheduled', 'overdue'].includes(expense.status))
+    .filter((expense) => {
+      const paidAfterSnapshot = expense.paid_date ? expense.paid_date >= range.end : true
+      return expense.status !== 'cancelled' && paidAfterSnapshot
+    })
     .reduce((sum, expense) => sum + Number(expense.total_amount), 0)
   const taxPayable =
-    expenses.filter((expense) => expense.category === 'tax_payment' && expense.status !== 'paid').reduce((sum, expense) => sum + Number(expense.total_amount), 0) +
-    payroll.filter((cycle) => cycle.status !== 'paid').reduce((sum, cycle) => sum + Number(cycle.tax_withholding), 0)
+    expenses
+      .filter((expense) => {
+        const paidAfterSnapshot = expense.paid_date ? expense.paid_date >= range.end : true
+        return expense.category === 'tax_payment' && expense.status !== 'cancelled' && paidAfterSnapshot
+      })
+      .reduce((sum, expense) => sum + Number(expense.total_amount), 0) +
+    payroll
+      .filter((cycle) => {
+        const paidAfterSnapshot = cycle.paid_at ? cycle.paid_at >= `${range.end}T00:00:00.000Z` : true
+        return paidAfterSnapshot
+      })
+      .reduce((sum, cycle) => sum + Number(cycle.tax_withholding), 0)
   const payrollPayable = payroll
-    .filter((cycle) => ['planned', 'reserved', 'approved', 'partial_paid', 'blocked'].includes(cycle.status))
+    .filter((cycle) => {
+      const paidAfterSnapshot = cycle.paid_at ? cycle.paid_at >= `${range.end}T00:00:00.000Z` : true
+      return paidAfterSnapshot && ['planned', 'reserved', 'approved', 'partial_paid', 'blocked', 'paid'].includes(cycle.status)
+    })
     .reduce((sum, cycle) => sum + Number(cycle.total_net_pay), 0)
   const loansReceived = capital.filter((row) => row.transaction_type === 'loan_received').reduce((sum, row) => sum + Number(row.amount), 0)
   const loanRepayments = capital.filter((row) => row.transaction_type === 'loan_repayment').reduce((sum, row) => sum + Number(row.amount), 0)

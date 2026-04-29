@@ -109,6 +109,18 @@ export async function updateInvoiceStatus(input: UpdateInvoiceStatusInput) {
   const updates: Record<string, string | null> = { status: parsed.status }
   if (parsed.status === 'sent') updates.sent_at = new Date().toISOString()
 
+  const { data: invoice } = await admin
+    .from('invoices')
+    .select('id, status')
+    .eq('organization_id', parsed.organizationId)
+    .eq('id', parsed.invoiceId)
+    .single()
+
+  if (!invoice) throw new Error('Invoice not found')
+  if (invoice.status === 'paid' && parsed.status !== 'cancelled') {
+    throw new Error('Paid invoices cannot be moved by status update')
+  }
+
   const { error } = await admin
     .from('invoices')
     .update(updates)

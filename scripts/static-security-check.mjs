@@ -25,6 +25,10 @@ for (const file of files) {
     findings.push(`${rel}: cron route does not call verifyCron(req)`)
   }
 
+  if (rel.startsWith('app/api/') && text.includes('requireWorkspaceAccess')) {
+    findings.push(`${rel}: API route should use getWorkspaceAccess and return JSON errors instead of redirect guards`)
+  }
+
   if (text.includes('SUPABASE_SERVICE_ROLE_KEY') && !rel.startsWith('lib/supabase/admin') && !isToolingScript) {
     findings.push(`${rel}: references SUPABASE_SERVICE_ROLE_KEY outside admin client`)
   }

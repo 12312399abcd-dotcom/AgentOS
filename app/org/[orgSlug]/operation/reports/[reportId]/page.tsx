@@ -33,6 +33,14 @@ export default async function ReportDetailPage({ params }: ReportDetailPageProps
     )
   }
 
+  if (member.role === 'viewer' && report.status !== 'approved') {
+    return (
+      <main className="shell">
+        <h1>Report not found</h1>
+      </main>
+    )
+  }
+
   const client = Array.isArray(report.clients) ? report.clients[0] : report.clients
   const data = report.report_data as ReportDraft
   const approveAction = approveReportFromForm.bind(null, organization.id, orgSlug)

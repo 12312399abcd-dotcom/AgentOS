@@ -22,6 +22,11 @@ export async function generateClientReport(input: GenerateReportInput) {
   const parsed = generateReportSchema.parse(input)
   const member = await requireWorkspaceAccess(parsed.organizationId, 'operation')
   const admin = createAdminClient()
+
+  if (!['admin', 'marketing', 'channel_manager'].includes(member.role)) {
+    throw new Error('Only admin, marketing, or channel manager can generate reports')
+  }
+
   const reportData = await buildClientReportDraft(parsed.organizationId, parsed.clientId, parsed.reportPeriod)
 
   const { data: report, error } = await admin
@@ -84,12 +89,15 @@ export async function exportReportPdf(organizationId: string, reportId: string) 
   const admin = createAdminClient()
   const { data: report } = await admin
     .from('reports')
-    .select('id, report_period, report_type, report_data, notes, clients(name)')
+    .select('id, report_period, report_type, status, report_data, notes, clients(name)')
     .eq('organization_id', organizationId)
     .eq('id', reportId)
     .single()
 
   if (!report) throw new Error('Report not found')
+  if (member.role === 'viewer' && report.status !== 'approved') {
+    throw new Error('Viewer can only export approved reports')
+  }
 
   const client = Array.isArray(report.clients) ? report.clients[0] : report.clients
   const data = report.report_data as Awaited<ReturnType<typeof buildClientReportDraft>>

@@ -10,7 +10,13 @@ const heartbeatSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const body = heartbeatSchema.parse(await req.json())
-  await heartbeatMemberSession(body.organizationId, body.activeMinutes, body.idleMinutes)
-  return NextResponse.json({ ok: true })
+  try {
+    const body = heartbeatSchema.parse(await req.json())
+    await heartbeatMemberSession(body.organizationId, body.activeMinutes, body.idleMinutes)
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Session heartbeat failed'
+    const status = message === 'Unauthorized' ? 401 : message === 'No organization access' ? 403 : 400
+    return NextResponse.json({ error: message }, { status })
+  }
 }

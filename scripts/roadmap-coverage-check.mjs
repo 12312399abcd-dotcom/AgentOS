@@ -73,7 +73,8 @@ const requiredServices = [
   'lib/services/storage.ts',
   'lib/services/audit.ts',
   'lib/services/csv.ts',
-  'lib/services/pdf.ts'
+  'lib/services/pdf.ts',
+  'lib/services/financial-periods.ts'
 ]
 
 for (const path of [...requiredRoutes, ...requiredApiRoutes, ...requiredServices]) {
@@ -95,6 +96,15 @@ mustContain('vercel.json', '/api/cron/daily-cashflow-review')
 mustContain('docs/qa_security_test_plan.md', 'Role-Based QA Matrix')
 mustContain('docs/deployment_launch_checklist.md', 'Production Smoke Test')
 mustContain('docs/deployment_launch_checklist.md', '0004_invoice_file_url.sql')
+mustContain('lib/actions/finance.ts', 'assertFinancialPeriodEditable')
+mustContain('lib/actions/invoices.ts', 'assertFinancialPeriodEditable')
+mustContain('lib/actions/payroll.ts', 'assertFinancialPeriodEditable')
+mustContain('lib/actions/reports.ts', 'Viewer can only export approved reports')
+mustContain('app/org/[orgSlug]/operation/reports/page.tsx', "member.role === 'viewer'")
+mustContain('app/api/exports/[exportType]/route.ts', 'getWorkspaceAccess')
+mustContain('app/api/integrations/notion/sync-content/route.ts', 'getWorkspaceAccess')
+mustContain('app/api/session/heartbeat/route.ts', 'No organization access')
+mustContain('lib/services/sessions.ts', 'assertActiveMembership')
 mustContain('README.md', 'npm run verify')
 mustContain('README.md', 'SUPABASE_SERVICE_ROLE_KEY')
 mustExist('eslint.config.mjs')

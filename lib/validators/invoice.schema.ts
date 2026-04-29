@@ -19,7 +19,7 @@ export const createInvoiceSchema = z.object({
 export const updateInvoiceStatusSchema = z.object({
   organizationId: z.string().uuid(),
   invoiceId: z.string().uuid(),
-  status: z.enum(['draft', 'sent', 'partial_paid', 'paid', 'overdue', 'cancelled'])
+  status: z.enum(['draft', 'sent', 'partial_paid', 'overdue', 'cancelled'])
 })
 
 export const markInvoicePaidSchema = z.object({

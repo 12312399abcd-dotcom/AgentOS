@@ -43,6 +43,8 @@ This plan validates the MVP against the roadmap security model:
 6. A user from Organization A cannot open `/org/[orgB]/...`.
 7. A user with no active membership is redirected to `/unauthorized`.
 8. Non-admin opening `/org/[orgSlug]/settings/*` redirects to default workspace.
+9. Viewer can only see approved reports and cannot open draft report detail URLs.
+10. API routes return JSON `401/403` errors for missing workspace access instead of redirecting.
 
 ## Organization Isolation Matrix
 
@@ -68,23 +70,27 @@ This plan validates the MVP against the roadmap security model:
 11. Notion sync preview returns mapped actions without inserting rows.
 12. Notion sync import inserts new content and tasks.
 13. Notion sync update modifies existing content by `notion_page_id`.
+14. Viewer cannot generate, approve, or export draft operation reports.
 
 ## Finance Tests
 
 1. Cashflow transaction rejects negative amount.
 2. Invoice totals are calculated server-side from invoice items.
 3. Marking invoice paid creates `money_in` cashflow.
-4. Paid business expense creates `money_out` cashflow.
-5. Payroll payment creates payroll cashflow rows and marks items paid.
-6. Payroll payment below reserve requires admin.
-7. Owner draw below reserve requires admin override note.
-8. Strict spending control blocks finance moderator money-out transactions that would break minimum reserve.
-9. Admin can override strict spending control through audited finance actions where allowed.
-10. Income statement excludes owner draw and loan principal repayment from expenses.
-11. Balance sheet calculates loans payable from loan received minus loan repayment.
-12. Period close creates balance sheet snapshot and locks the financial period.
-13. Out-of-balance period close requires admin override note.
-14. Finance dashboard shows cash gap, payroll gap, spending allowance, and forecast variance.
+4. Invoice cannot be marked `paid` through a plain status update because payment must create cashflow.
+5. Paid business expense creates `money_out` cashflow.
+6. Payroll payment creates payroll cashflow rows and marks items paid.
+7. Payroll payment below reserve requires admin.
+8. Owner draw below reserve requires admin override note.
+9. Strict spending control blocks finance moderator money-out transactions that would break minimum reserve.
+10. Admin can override strict spending control through audited finance actions where allowed.
+11. Income statement excludes owner draw and loan principal repayment from expenses.
+12. Balance sheet calculates loans payable from loan received minus loan repayment.
+13. Balance sheet accounts receivable, accounts payable, and payroll payable are calculated as of the selected period end.
+14. Period close creates balance sheet snapshot and locks the financial period.
+15. Out-of-balance period close requires admin override note.
+16. Cashflow, invoice payment, expense payment, payroll payment, and capital movement reject dates inside closed or locked periods.
+17. Finance dashboard shows cash gap, payroll gap, spending allowance, and forecast variance.
 
 ## Cron Tests
 
@@ -104,6 +110,13 @@ This plan validates the MVP against the roadmap security model:
 3. Content detail page renders a signed URL, not a public file URL.
 4. Finance invoice files are not public.
 5. Non-admin cannot hard-delete finance files.
+
+## Session Tests
+
+1. Heartbeat creates or updates a session only for an organization where the user has active membership.
+2. Heartbeat with another organization ID returns `403`.
+3. End session with another organization ID returns `403`.
+4. Session APIs return JSON errors, not redirects or HTML.
 
 ## Audit Tests
 

@@ -3,7 +3,23 @@ import { createClient } from '@/lib/supabase/server'
 
 export const SESSION_CONSENT_VERSION = 'agency-os-session-v1'
 
+async function assertActiveMembership(organizationId: string, userId: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('No organization access')
+}
+
 export async function startMemberSession(organizationId: string, userId: string) {
+  await assertActiveMembership(organizationId, userId)
+
   const admin = createAdminClient()
   const { data: existing } = await admin
     .from('member_sessions')
@@ -39,6 +55,7 @@ export async function heartbeatMemberSession(organizationId: string, activeMinut
   } = await supabase.auth.getUser()
 
   if (!user) throw new Error('Unauthorized')
+  await assertActiveMembership(organizationId, user.id)
 
   const { data: session } = await supabase
     .from('member_sessions')
@@ -75,6 +92,7 @@ export async function endCurrentMemberSession(organizationId: string) {
   } = await supabase.auth.getUser()
 
   if (!user) throw new Error('Unauthorized')
+  await assertActiveMembership(organizationId, user.id)
 
   const { error } = await supabase
     .from('member_sessions')
