@@ -97,6 +97,20 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
   const forecastVariance = (moneyIn - moneyOut) - (expectedMoneyIn - expectedMoneyOut)
   const payrollRisk = payrollGap < 0 ? 'critical' : projectedCashAfterPayroll < minimumReserve ? 'high' : 'normal'
   const cashRisk = projectedMonthEndCash < 0 || payrollGap < 0 ? 'critical' : cashGap < 0 ? 'high' : 'normal'
+  const cashflowSnapshot = [
+    { label: 'Money in', value: moneyIn },
+    { label: 'Money out', value: moneyOut },
+    { label: 'Net cashflow', value: Math.max(moneyIn - moneyOut, 0) },
+    { label: 'Forecast variance', value: Math.max(Math.abs(forecastVariance), 0) }
+  ]
+  const cashflowMax = Math.max(...cashflowSnapshot.map((item) => item.value), 1)
+  const safetySnapshot = [
+    { label: 'Current cash', value: currentCash },
+    { label: 'Projected month-end', value: projectedMonthEndCash },
+    { label: 'Minimum reserve', value: minimumReserve },
+    { label: 'Spending allowance', value: Math.max(spendingAllowance, 0) }
+  ]
+  const safetyMax = Math.max(...safetySnapshot.map((item) => item.value), 1)
 
   return (
     <main className="shell">
@@ -123,6 +137,32 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
         <div className="card"><strong>Forecast Variance</strong><p>{forecastVariance.toLocaleString()}</p></div>
         <div className="card"><strong>Active Forecast</strong><p>{forecast ? `${forecast.forecast_month} · ${forecast.status}` : 'none'}</p></div>
       </div>
+      <section className="dashboard-chart-grid">
+        <article className="card chart-panel">
+          <h2>Cashflow MTD</h2>
+          <div className="chart-bars">
+            {cashflowSnapshot.map((item) => (
+              <div className="chart-bar-row" key={item.label}>
+                <span>{item.label}</span>
+                <div><i style={{ width: `${Math.max((item.value / cashflowMax) * 100, 4)}%` }} /></div>
+                <strong>{item.value.toLocaleString()}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="card chart-panel">
+          <h2>Cash Safety</h2>
+          <div className="chart-bars">
+            {safetySnapshot.map((item) => (
+              <div className="chart-bar-row" key={item.label}>
+                <span>{item.label}</span>
+                <div><i style={{ width: `${Math.max((item.value / safetyMax) * 100, 4)}%` }} /></div>
+                <strong>{item.value.toLocaleString()}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
       <section className="card">
         <h2>Forecast vs Actual</h2>
         <div className="table-wrap">

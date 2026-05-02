@@ -86,6 +86,15 @@ export default async function OperationDashboard({ params }: OperationDashboardP
     acc[task.status] = (acc[task.status] ?? 0) + 1
     return acc
   }, {})
+  const workflowStatuses = ['backlog', 'assigned', 'in_progress', 'review', 'approved', 'completed', 'blocked']
+  const maxWorkflowCount = Math.max(...workflowStatuses.map((status) => workflowCounts[status] ?? 0), 1)
+  const productionSnapshot = [
+    { label: 'This week', value: contentThisWeek ?? 0 },
+    { label: 'Pending review', value: pendingReview ?? 0 },
+    { label: 'Ready', value: readyToPublish ?? 0 },
+    { label: 'Risk', value: riskItems ?? 0 }
+  ]
+  const maxProductionCount = Math.max(...productionSnapshot.map((item) => item.value), 1)
   const contentMissingTasks = (missingTaskContent ?? []).filter((item) => {
     const tasks = Array.isArray(item.tasks) ? item.tasks : []
     const roles = new Set(tasks.map((task) => task.required_role))
@@ -109,10 +118,36 @@ export default async function OperationDashboard({ params }: OperationDashboardP
         <div className="card"><strong>Published This Month</strong><p>{publishedThisMonth ?? 0}</p></div>
         <div className="card"><strong>Production Risk</strong><p>{riskItems ?? 0}</p></div>
       </div>
+      <section className="dashboard-chart-grid">
+        <article className="card chart-panel">
+          <h2>Workflow by Status</h2>
+          <div className="chart-bars">
+            {workflowStatuses.map((status) => (
+              <div className="chart-bar-row" key={status}>
+                <span>{status.replaceAll('_', ' ')}</span>
+                <div><i style={{ width: `${Math.max(((workflowCounts[status] ?? 0) / maxWorkflowCount) * 100, 4)}%` }} /></div>
+                <strong>{workflowCounts[status] ?? 0}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="card chart-panel">
+          <h2>Content Production</h2>
+          <div className="chart-bars">
+            {productionSnapshot.map((item) => (
+              <div className="chart-bar-row" key={item.label}>
+                <span>{item.label}</span>
+                <div><i style={{ width: `${Math.max((item.value / maxProductionCount) * 100, 4)}%` }} /></div>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
       <section>
         <h2>Workflow Health</h2>
         <div className="grid">
-          {['backlog', 'assigned', 'in_progress', 'review', 'approved', 'completed', 'blocked'].map((status) => (
+          {workflowStatuses.map((status) => (
             <div className="card" key={status}>
               <strong>{status.replaceAll('_', ' ')}</strong>
               <p>{workflowCounts[status] ?? 0}</p>

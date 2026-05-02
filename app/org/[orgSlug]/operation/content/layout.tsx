@@ -5,7 +5,7 @@ type ContentLayoutProps = {
   params: Promise<{ orgSlug: string }>
 }
 
-const views = ['calendar', 'list', 'board', 'table', 'timeline']
+const views = ['calendar', 'schedule', 'list', 'board', 'table', 'timeline']
 
 export default async function ContentLayout({ children, params }: ContentLayoutProps) {
   const { orgSlug } = await params

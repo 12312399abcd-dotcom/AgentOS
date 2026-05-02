@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cache } from 'react'
 
 import { createClient } from '@/lib/supabase/server'
 import { canAccessFinance, canAccessOperation, type Workspace } from './workspace'
@@ -20,7 +21,7 @@ export type OrganizationSummary = {
   currency: string
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async () => {
   const supabase = await createClient()
   const {
     data: { user },
@@ -32,7 +33,7 @@ export async function getCurrentUser() {
   }
 
   return user
-}
+})
 
 export async function requireUser() {
   const user = await getCurrentUser()
@@ -44,7 +45,7 @@ export async function requireUser() {
   return user
 }
 
-export async function getOrganizationBySlug(orgSlug: string): Promise<OrganizationSummary | null> {
+export const getOrganizationBySlug = cache(async (orgSlug: string): Promise<OrganizationSummary | null> => {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('organizations')
@@ -57,9 +58,9 @@ export async function getOrganizationBySlug(orgSlug: string): Promise<Organizati
   }
 
   return data as OrganizationSummary
-}
+})
 
-export async function getCurrentOrgMember(orgId: string): Promise<OrgMember | null> {
+export const getCurrentOrgMember = cache(async (orgId: string): Promise<OrgMember | null> => {
   const user = await getCurrentUser()
 
   if (!user) {
@@ -80,7 +81,7 @@ export async function getCurrentOrgMember(orgId: string): Promise<OrgMember | nu
   }
 
   return data
-}
+})
 
 export async function requireOrgAccess(orgId: string) {
   const member = await getCurrentOrgMember(orgId)
@@ -134,7 +135,7 @@ export async function requireAdmin(orgId: string) {
   return member
 }
 
-export async function listActiveMemberships() {
+export const listActiveMemberships = cache(async () => {
   const user = await requireUser()
   const supabase = await createClient()
 
@@ -155,4 +156,4 @@ export async function listActiveMemberships() {
 
     return organization?.status === 'active'
   })
-}
+})

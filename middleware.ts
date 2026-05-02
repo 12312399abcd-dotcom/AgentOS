@@ -51,25 +51,21 @@ export async function middleware(req: NextRequest) {
   const orgSlug = orgMatch[1]
   const routeTail = orgMatch[2] ?? ''
 
-  const { data: organization } = await supabase
-    .from('organizations')
-    .select('id, slug, status')
-    .eq('slug', orgSlug)
-    .single()
+  const { data: member } = await supabase
+    .from('organization_members')
+    .select('role, organizations!inner(id, slug, status)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .eq('organizations.slug', orgSlug)
+    .eq('organizations.status', 'active')
+    .maybeSingle()
 
-  if (!organization || organization.status !== 'active') {
+  if (!member) {
     return NextResponse.redirect(new URL('/unauthorized', req.url))
   }
 
-  const { data: member } = await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('organization_id', organization.id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
-
-  if (!member) {
+  const organization = Array.isArray(member.organizations) ? member.organizations[0] : member.organizations
+  if (!organization) {
     return NextResponse.redirect(new URL('/unauthorized', req.url))
   }
 

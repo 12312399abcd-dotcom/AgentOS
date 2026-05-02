@@ -1000,15 +1000,19 @@ button:disabled {
 }
 
 .ghost-button,
-.switcher-button {
+.switcher-button,
+.ghost-link {
   background: transparent;
   border: 1px solid rgba(23, 32, 51, 0.14);
+  border-radius: 999px;
   color: var(--foreground);
   padding: 7px 10px;
+  text-decoration: none;
 }
 
 .ghost-button:hover,
-.switcher-button:hover {
+.switcher-button:hover,
+.ghost-link:hover {
   background: var(--panel-subtle);
 }
 
@@ -1320,12 +1324,107 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
+.dashboard-chart-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.chart-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.chart-panel h2 {
+  margin: 0;
+}
+
+.chart-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.chart-bar-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(140px, 2fr) minmax(48px, auto);
+}
+
+.chart-bar-row span {
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.chart-bar-row div {
+  background: #eef3f0;
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.chart-bar-row i {
+  background: linear-gradient(90deg, var(--accent), #254b3f);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.chart-bar-row strong {
+  color: var(--foreground);
+  font-size: 13px;
+  text-align: right;
+}
+
+.schedule-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.form-wide {
+  max-width: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-span-2 {
+  grid-column: 1 / -1;
+}
+
 .skeleton {
   animation: pulse 1.4s ease-in-out infinite;
   background: linear-gradient(90deg, #eef2f6, #f8fafc, #eef2f6);
   background-size: 200% 100%;
   border-radius: var(--radius);
   min-height: 44px;
+}
+
+.page-loading {
+  display: grid;
+  gap: 18px;
+}
+
+.skeleton-title {
+  height: 46px;
+  max-width: 380px;
+}
+
+.skeleton-filter {
+  height: 76px;
+}
+
+.skeleton-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.skeleton-card {
+  min-height: 150px;
+}
+
+.skeleton-table {
+  min-height: 340px;
 }
 
 .toast {
@@ -1517,6 +1616,19 @@ pre {
 
   .content-calendar-grid {
     grid-template-columns: repeat(7, minmax(114px, 1fr));
+  }
+
+  .dashboard-chart-grid,
+  .form-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-bar-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-bar-row strong {
+    text-align: left;
   }
 
   .inline-form button,

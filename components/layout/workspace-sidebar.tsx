@@ -10,6 +10,7 @@ const operationLinks = [
   ['Content', 'content/calendar'],
   ['Tasks', 'tasks'],
   ['Clients', 'clients'],
+  ['Team', 'team'],
   ['Social', 'social'],
   ['Reports', 'reports']
 ]
