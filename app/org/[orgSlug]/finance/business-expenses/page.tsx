@@ -1,4 +1,3 @@
-import { addBusinessExpenseFromForm, markBusinessExpensePaidFromForm } from '@/lib/actions/finance'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -29,13 +28,10 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
   if (filters.start) expensesQuery = expensesQuery.gte('expense_date', filters.start)
   if (filters.end) expensesQuery = expensesQuery.lte('expense_date', filters.end)
 
-  const [{ data: expenses }, { data: clients }, { data: accounts }] = await Promise.all([
+  const [{ data: expenses }, { data: clients }] = await Promise.all([
     expensesQuery,
-    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
-    supabase.from('business_accounts').select('id, account_name').eq('organization_id', organization.id).eq('status', 'active').order('account_name')
+    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name')
   ])
-  const addExpenseAction = addBusinessExpenseFromForm.bind(null, organization.id, orgSlug)
-  const paidAction = markBusinessExpensePaidFromForm.bind(null, organization.id, orgSlug)
   const unpaid = (expenses ?? []).filter((expense) => ['unpaid', 'scheduled', 'overdue'].includes(expense.status))
   const totalPayable = unpaid.reduce((sum, expense) => sum + Number(expense.total_amount), 0)
   const exportParams = new URLSearchParams({ orgSlug })
@@ -49,7 +45,11 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
     <main className="shell">
       <h1>Business Expenses</h1>
       <div className="actions">
+        <a href={`/org/${orgSlug}/finance/journal`}>Add or pay expense in Journal</a>
         <a href={`/api/exports/business-expenses?${exportParams.toString()}`}>Export CSV</a>
+      </div>
+      <div className="notice">
+        Expenses are entered and paid from Finance Journal. This page is the expense ledger view for filtering, audit, and export.
       </div>
       <div className="grid">
         <div className="card"><strong>Open Expenses</strong><p>{unpaid.length}</p></div>
@@ -78,49 +78,6 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
           <button type="submit">Filter</button>
         </form>
       </section>
-      <section className="card">
-        <h2>Add expense</h2>
-        <form className="form" action={addExpenseAction}>
-          <label>Expense date<input name="expenseDate" type="date" required /></label>
-          <label>Due date<input name="dueDate" type="date" /></label>
-          <label>Paid date<input name="paidDate" type="date" /></label>
-          <label>Category<input name="category" required placeholder="payroll, software_subscription, office_rent" /></label>
-          <label>Vendor<input name="vendorName" /></label>
-          <label>Description<textarea name="description" rows={3} /></label>
-          <label>Amount<input name="amount" type="number" min="0" step="0.01" required /></label>
-          <label>Tax<input name="taxAmount" type="number" min="0" step="0.01" defaultValue="0" /></label>
-          <label>
-            Status
-            <select name="status" defaultValue="unpaid">
-              <option value="unpaid">Unpaid</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="paid">Paid</option>
-              <option value="overdue">Overdue</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </label>
-          <label>
-            Client
-            <select name="clientId" defaultValue="">
-              <option value="">Company-level</option>
-              {(clients ?? []).map((client) => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Business account
-            <select name="businessAccountId" defaultValue="">
-              <option value="">No account</option>
-              {(accounts ?? []).map((account) => (
-                <option key={account.id} value={account.id}>{account.account_name}</option>
-              ))}
-            </select>
-          </label>
-          <label>Payment method<input name="paymentMethod" /></label>
-          <button type="submit">Add expense</button>
-        </form>
-      </section>
       <section>
         <h2>Expenses</h2>
         <div className="table-wrap">
@@ -133,7 +90,6 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
                 <th>Total</th>
                 <th>Status</th>
                 <th>Paid Date</th>
-                <th>Mark Paid</th>
               </tr>
             </thead>
             <tbody>
@@ -148,22 +104,6 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
                     <td>{Number(expense.total_amount).toLocaleString()}</td>
                     <td>{expense.status}</td>
                     <td>{expense.paid_date ?? ''}</td>
-                    <td>
-                      {expense.status !== 'paid' && expense.status !== 'cancelled' ? (
-                        <form className="inline-form" action={paidAction}>
-                          <input type="hidden" name="expenseId" value={expense.id} />
-                          <input name="paidDate" type="date" required />
-                          <select name="businessAccountId" defaultValue="">
-                            <option value="">No account</option>
-                            {(accounts ?? []).map((account) => (
-                              <option key={account.id} value={account.id}>{account.account_name}</option>
-                            ))}
-                          </select>
-                          <input name="paymentMethod" placeholder="Method" />
-                          <button type="submit">Paid</button>
-                        </form>
-                      ) : null}
-                    </td>
                   </tr>
                 )
               })}

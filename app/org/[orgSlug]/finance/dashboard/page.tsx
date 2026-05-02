@@ -60,7 +60,15 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
   nextSevenDays.setDate(nextSevenDays.getDate() + 7)
   const nextSevenDaysIso = nextSevenDays.toISOString().slice(0, 10)
 
-  const [{ data: transactions }, { data: accounts }, { data: settings }, { data: expenses }, { data: payrollCycles }, { data: forecast }] = await Promise.all([
+  const [
+    { data: transactions },
+    { data: accounts },
+    { data: settings },
+    { data: expenses },
+    { data: payrollCycles },
+    { data: forecast },
+    { data: invoices }
+  ] = await Promise.all([
     supabase
       .from('cashflow_transactions')
       .select('direction, amount, transaction_date, category')
@@ -92,7 +100,12 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
       .eq('organization_id', organization.id)
       .eq('forecast_month', currentMonth)
       .in('status', ['approved', 'active', 'closed'])
-      .maybeSingle()
+      .maybeSingle(),
+    supabase
+      .from('invoices')
+      .select('id, total_amount, due_date, status')
+      .eq('organization_id', organization.id)
+      .in('status', ['sent', 'partial_paid', 'overdue'])
   ])
 
   const allTransactions = transactions ?? []
@@ -116,6 +129,8 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
     .filter((item) => item.direction === 'money_out' && item.transaction_date >= monthStart && item.category === 'tax_payment')
     .reduce((sum, item) => sum + Number(item.amount), 0)
   const accountsPayable = (expenses ?? []).reduce((sum, expense) => sum + Number(expense.total_amount), 0)
+  const accountsReceivable = (invoices ?? []).reduce((sum, invoice) => sum + Number(invoice.total_amount), 0)
+  const overdueReceivables = (invoices ?? []).filter((invoice) => invoice.status === 'overdue' || (invoice.due_date && invoice.due_date < today))
   const upcomingBills = (expenses ?? []).filter((expense) => expense.due_date && expense.due_date >= today && expense.due_date <= nextSevenDaysIso)
   const overdueExpenses = (expenses ?? []).filter((expense) => expense.due_date && expense.due_date < today)
   const expectedMoneyIn = Number(forecast?.expected_money_in ?? 0)
@@ -171,32 +186,63 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
     { label: 'Allowance', value: Math.max(spendingAllowance, 0) }
   ]
   const cashPositionMax = Math.max(...cashPositionColumns.map((item) => item.value), 1)
+  const profitNow = moneyIn - moneyOut
+  const budgetIncrease = expectedMoneyOut > 0 ? ((moneyOut - expectedMoneyOut) / expectedMoneyOut) * 100 : 0
+  const financeStatus =
+    cashRisk === 'critical'
+      ? 'Cash is critical'
+      : cashRisk === 'high'
+        ? 'Cash needs attention'
+        : profitNow < 0
+          ? 'Profit is negative this month'
+          : accountsReceivable > accountsPayable
+            ? 'Receivables can cover bills'
+            : 'Cash is stable'
 
   return (
     <main className="shell">
-      <h1>Finance Dashboard</h1>
-      <div className="grid">
-        <div className="card"><strong>Current Cash</strong><p>{currentCash.toLocaleString()}</p></div>
-        <div className="card"><strong>Money In MTD</strong><p>{moneyIn.toLocaleString()}</p></div>
-        <div className="card"><strong>Money Out MTD</strong><p>{moneyOut.toLocaleString()}</p></div>
-        <div className="card"><strong>Net Cashflow</strong><p>{(moneyIn - moneyOut).toLocaleString()}</p></div>
-        <div className="card"><strong>Minimum Reserve</strong><p>{minimumReserve.toLocaleString()}</p></div>
-        <div className="card"><strong>Accounts Payable</strong><p>{accountsPayable.toLocaleString()}</p></div>
-        <div className="card"><strong>Cash Gap / Surplus</strong><p>{cashGap.toLocaleString()}</p></div>
-        <div className="card"><strong>Cash Risk</strong><p>{cashRisk}</p></div>
-        <div className="card"><strong>Payroll Due</strong><p>{payrollDue.toLocaleString()}</p></div>
-        <div className="card"><strong>Payroll Gap</strong><p>{payrollGap.toLocaleString()}</p></div>
-        <div className="card"><strong>Projected After Payroll</strong><p>{projectedCashAfterPayroll.toLocaleString()}</p></div>
-        <div className="card"><strong>Payroll Risk</strong><p>{payrollRisk}</p></div>
-        <div className="card"><strong>Projected Month-End Cash</strong><p>{projectedMonthEndCash.toLocaleString()}</p></div>
-        <div className="card"><strong>Expected Remaining In</strong><p>{expectedRemainingIn.toLocaleString()}</p></div>
-        <div className="card"><strong>Expected Remaining Out</strong><p>{expectedRemainingOut.toLocaleString()}</p></div>
-        <div className="card"><strong>Spending Allowance</strong><p>{spendingAllowance.toLocaleString()}</p></div>
-        <div className="card"><strong>Tax Reserve Needed</strong><p>{taxReserveNeeded.toLocaleString()}</p></div>
-        <div className="card"><strong>Tax Paid</strong><p>{taxPaid.toLocaleString()}</p></div>
-        <div className="card"><strong>Forecast Variance</strong><p>{forecastVariance.toLocaleString()}</p></div>
-        <div className="card"><strong>Active Forecast</strong><p>{forecast ? `${forecast.forecast_month} · ${forecast.status}` : 'none'}</p></div>
-      </div>
+      <h1>Finance Overview</h1>
+      <section className="finance-question-grid">
+        <article className="card finance-question-card">
+          <span>Cash right now</span>
+          <strong>{currentCash.toLocaleString()}</strong>
+          <p>{cashGap >= 0 ? `${cashGap.toLocaleString()} above reserve` : `${Math.abs(cashGap).toLocaleString()} below reserve`}</p>
+        </article>
+        <article className="card finance-question-card">
+          <span>Profit this month</span>
+          <strong>{profitNow.toLocaleString()}</strong>
+          <p>{moneyIn.toLocaleString()} in · {moneyOut.toLocaleString()} out</p>
+        </article>
+        <article className="card finance-question-card">
+          <span>Money owed to you</span>
+          <strong>{accountsReceivable.toLocaleString()}</strong>
+          <p>{overdueReceivables.length} overdue invoice(s)</p>
+        </article>
+        <article className="card finance-question-card">
+          <span>Bills you owe</span>
+          <strong>{accountsPayable.toLocaleString()}</strong>
+          <p>{overdueExpenses.length} overdue · {upcomingBills.length} due soon</p>
+        </article>
+        <article className="card finance-question-card">
+          <span>Future cash</span>
+          <strong>{projectedMonthEndCash.toLocaleString()}</strong>
+          <p>{expectedRemainingIn.toLocaleString()} expected in · {expectedRemainingOut.toLocaleString()} expected out</p>
+        </article>
+        <article className="card finance-question-card">
+          <span>Monthly budget change</span>
+          <strong>{budgetIncrease.toFixed(0)}%</strong>
+          <p>{forecast ? `${forecast.forecast_month} forecast` : 'No active forecast yet'}</p>
+        </article>
+      </section>
+      <section className="card finance-readout">
+        <h2>{financeStatus}</h2>
+        <div className="finance-readout-grid">
+          <p><strong>Safe to spend:</strong> {spendingAllowance.toLocaleString()}</p>
+          <p><strong>Payroll gap:</strong> {payrollGap.toLocaleString()} · {payrollRisk}</p>
+          <p><strong>Tax still needed:</strong> {Math.max(taxReserveNeeded - taxPaid, 0).toLocaleString()}</p>
+          <p><strong>Forecast variance:</strong> {forecastVariance.toLocaleString()}</p>
+        </div>
+      </section>
       <section className="dashboard-chart-grid">
         <article className="card chart-panel">
           <h2>Cashflow MTD</h2>

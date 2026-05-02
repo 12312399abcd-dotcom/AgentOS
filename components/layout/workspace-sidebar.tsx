@@ -17,6 +17,7 @@ const operationLinks = [
 
 const financeLinks = [
   ['Dashboard', 'dashboard'],
+  ['Journal', 'journal'],
   ['Forecast Budget', 'forecast-budget'],
   ['Cashflow', 'cashflow'],
   ['Income Statement', 'income-statement'],

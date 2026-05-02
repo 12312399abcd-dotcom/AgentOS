@@ -406,6 +406,7 @@ export async function addCashflowTransactionFromForm(organizationId: string, org
 
   revalidatePath(`/org/${orgSlug}/finance/cashflow`)
   revalidatePath(`/org/${orgSlug}/finance/dashboard`)
+  revalidatePath(`/org/${orgSlug}/finance/journal`)
 }
 
 export async function addBusinessExpenseFromForm(organizationId: string, orgSlug: string, formData: FormData) {
@@ -428,6 +429,7 @@ export async function addBusinessExpenseFromForm(organizationId: string, orgSlug
   revalidatePath(`/org/${orgSlug}/finance/business-expenses`)
   revalidatePath(`/org/${orgSlug}/finance/cashflow`)
   revalidatePath(`/org/${orgSlug}/finance/dashboard`)
+  revalidatePath(`/org/${orgSlug}/finance/journal`)
 }
 
 export async function markBusinessExpensePaidFromForm(organizationId: string, orgSlug: string, formData: FormData) {
@@ -442,6 +444,7 @@ export async function markBusinessExpensePaidFromForm(organizationId: string, or
   revalidatePath(`/org/${orgSlug}/finance/business-expenses`)
   revalidatePath(`/org/${orgSlug}/finance/cashflow`)
   revalidatePath(`/org/${orgSlug}/finance/dashboard`)
+  revalidatePath(`/org/${orgSlug}/finance/journal`)
 }
 
 export async function addCapitalTransactionFromForm(organizationId: string, orgSlug: string, formData: FormData) {
@@ -461,4 +464,5 @@ export async function addCapitalTransactionFromForm(organizationId: string, orgS
   revalidatePath(`/org/${orgSlug}/finance/cashflow`)
   revalidatePath(`/org/${orgSlug}/finance/dashboard`)
   revalidatePath(`/org/${orgSlug}/finance/balance-sheet`)
+  revalidatePath(`/org/${orgSlug}/finance/journal`)
 }

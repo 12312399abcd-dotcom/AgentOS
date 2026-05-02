@@ -1,4 +1,4 @@
-import { addCashflowTransactionFromForm, createBusinessAccountFromForm } from '@/lib/actions/finance'
+import { createBusinessAccountFromForm } from '@/lib/actions/finance'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -43,7 +43,6 @@ export default async function CashflowPage({ params, searchParams }: CashflowPag
     transactionsQuery
   ])
   const accountAction = createBusinessAccountFromForm.bind(null, organization.id, orgSlug)
-  const cashflowAction = addCashflowTransactionFromForm.bind(null, organization.id, orgSlug)
   const totalIn = (transactions ?? []).filter((item) => item.direction === 'money_in').reduce((sum, item) => sum + Number(item.amount), 0)
   const totalOut = (transactions ?? []).filter((item) => item.direction === 'money_out').reduce((sum, item) => sum + Number(item.amount), 0)
   const exportParams = new URLSearchParams({ orgSlug })
@@ -58,7 +57,11 @@ export default async function CashflowPage({ params, searchParams }: CashflowPag
     <main className="shell">
       <h1>Cashflow</h1>
       <div className="actions">
+        <a href={`/org/${orgSlug}/finance/journal`}>Add journal entry</a>
         <a href={`/api/exports/cashflow?${exportParams.toString()}`}>Export CSV</a>
+      </div>
+      <div className="notice">
+        Cashflow is calculated from Finance Journal entries, paid expenses, invoices, payroll, and capital records.
       </div>
       <section>
         <h2>Filters</h2>
@@ -108,44 +111,6 @@ export default async function CashflowPage({ params, searchParams }: CashflowPag
           <label>Currency<input name="currency" maxLength={3} defaultValue={organization.currency} /></label>
           <label>Opening balance<input name="openingBalance" type="number" step="0.01" defaultValue="0" /></label>
           <button type="submit">Create account</button>
-        </form>
-      </section>
-      <section className="card">
-        <h2>Add cashflow transaction</h2>
-        <form className="form" action={cashflowAction}>
-          <label>Transaction date<input name="transactionDate" type="date" required /></label>
-          <label>
-            Direction
-            <select name="direction" defaultValue="money_in">
-              <option value="money_in">Money in</option>
-              <option value="money_out">Money out</option>
-            </select>
-          </label>
-          <label>Category<input name="category" required placeholder="client_retainer, payroll, software_subscription" /></label>
-          <label>Amount<input name="amount" type="number" min="0" step="0.01" required /></label>
-          <label>
-            Business account
-            <select name="businessAccountId" defaultValue="">
-              <option value="">No account</option>
-              {(accounts ?? []).map((account) => (
-                <option key={account.id} value={account.id}>{account.account_name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Client
-            <select name="clientId" defaultValue="">
-              <option value="">Company-level</option>
-              {(clients ?? []).map((client) => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>Vendor<input name="vendorName" /></label>
-          <label>Payee<input name="payeeName" /></label>
-          <label>Payment method<input name="paymentMethod" /></label>
-          <label>Notes<textarea name="notes" rows={3} /></label>
-          <button type="submit">Add transaction</button>
         </form>
       </section>
       <section>

@@ -3,6 +3,7 @@ import {
   createForecastBudgetFromForm,
   updateForecastStatusFromForm
 } from '@/lib/actions/forecasts'
+import { forecastCategories } from '@/lib/finance/categories'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -126,7 +127,11 @@ export default async function ForecastBudgetPage({ params, searchParams }: Forec
                 <option value="liability_payment">Liability payment</option>
                 <option value="owner_equity">Owner equity</option>
               </select>
-              <input name="category" required placeholder="Category" />
+              <select name="category" required defaultValue="payroll">
+                {forecastCategories.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
               <input name="description" placeholder="Description" />
               <select name="clientId" defaultValue="">
                 <option value="">Company-level</option>

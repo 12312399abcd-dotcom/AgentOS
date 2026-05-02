@@ -1391,6 +1391,55 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(320px, 1fr));
 }
 
+.finance-question-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.finance-question-card {
+  display: grid;
+  gap: 8px;
+}
+
+.finance-question-card span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.finance-question-card strong {
+  color: var(--foreground);
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.finance-question-card p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.finance-readout {
+  display: grid;
+  gap: 14px;
+}
+
+.finance-readout h2 {
+  margin: 0;
+}
+
+.finance-readout-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.finance-readout-grid p {
+  background: #f7f9f5;
+  border-radius: 8px;
+  margin: 0;
+  padding: 12px;
+}
+
 .finance-visual-wide {
   grid-column: 1 / -1;
 }
@@ -1578,6 +1627,12 @@ button:disabled {
   border-radius: 999px;
   display: block;
   height: 11px;
+}
+
+.journal-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
 }
 
 .schedule-panel {
@@ -1823,7 +1878,10 @@ pre {
 
   .dashboard-chart-grid,
   .finance-visual-grid,
+  .finance-question-grid,
+  .finance-readout-grid,
   .finance-meter-grid,
+  .journal-grid,
   .form-wide {
     grid-template-columns: 1fr;
   }
