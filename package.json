@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "security:check": "node scripts/static-security-check.mjs",
     "roadmap:check": "node scripts/roadmap-coverage-check.mjs",
-    "verify": "npm run lint && npm run security:check && npm run roadmap:check && npm run typecheck && npm run build"
+    "smoke:check": "node scripts/smoke-check.mjs",
+    "supabase:check": "node scripts/supabase-env-check.mjs",
+    "verify": "npm run lint && npm run security:check && npm run roadmap:check && npm run smoke:check && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

@@ -21,6 +21,33 @@ function readOptionalString(formData: FormData, key: string) {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
+async function assertBusinessAccountBelongsToOrg(admin: ReturnType<typeof createAdminClient>, organizationId: string, accountId?: string) {
+  if (!accountId) return
+
+  const { data } = await admin
+    .from('business_accounts')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('id', accountId)
+    .maybeSingle()
+
+  if (!data) throw new Error('Business account does not belong to this organization')
+}
+
+async function assertMemberBelongsToOrg(admin: ReturnType<typeof createAdminClient>, organizationId: string, userId?: string) {
+  if (!userId) return
+
+  const { data } = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!data) throw new Error('Payroll user does not belong to this organization')
+}
+
 async function recalculatePayrollCycle(admin: ReturnType<typeof createAdminClient>, organizationId: string, payrollCycleId: string) {
   const { data: items, error } = await admin
     .from('payroll_items')
@@ -100,6 +127,7 @@ export async function addPayrollItem(input: PayrollItemInput) {
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
   const netAmount = Math.max(parsed.grossAmount - parsed.taxAmount, 0)
+  await assertMemberBelongsToOrg(admin, parsed.organizationId, parsed.userId)
 
   const { data: cycle } = await admin
     .from('payroll_cycles')
@@ -144,6 +172,18 @@ export async function approvePayrollCycle(input: ApprovePayrollCycleInput) {
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
 
+  const { data: cycle, error: readError } = await admin
+    .from('payroll_cycles')
+    .select('id, status')
+    .eq('organization_id', parsed.organizationId)
+    .eq('id', parsed.payrollCycleId)
+    .single()
+
+  if (readError || !cycle) throw new Error('Payroll cycle not found')
+  if (!['planned', 'reserved', 'blocked'].includes(cycle.status)) {
+    throw new Error('Only planned, reserved, or blocked payroll cycles can be approved')
+  }
+
   const { error } = await admin
     .from('payroll_cycles')
     .update({
@@ -169,6 +209,7 @@ export async function payPayrollCycle(input: PayPayrollCycleInput) {
   const parsed = payPayrollCycleSchema.parse(input)
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
+  await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
 
   const [{ data: cycle }, { data: items }, { data: settings }] = await Promise.all([
     admin

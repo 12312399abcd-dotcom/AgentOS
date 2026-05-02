@@ -53,11 +53,11 @@ export async function middleware(req: NextRequest) {
 
   const { data: organization } = await supabase
     .from('organizations')
-    .select('id, slug')
+    .select('id, slug, status')
     .eq('slug', orgSlug)
     .single()
 
-  if (!organization) {
+  if (!organization || organization.status !== 'active') {
     return NextResponse.redirect(new URL('/unauthorized', req.url))
   }
 

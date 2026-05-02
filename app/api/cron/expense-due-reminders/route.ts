@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { verifyCron } from '@/lib/services/cron'
-import { createNotifications, listFinanceRecipientIds } from '@/lib/services/notifications'
+import { createDailyCronNotifications, listFinanceRecipientIds } from '@/lib/services/notifications'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: Request) {
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
     })))
   }
 
-  await createNotifications(notifications)
+  const insertedNotifications = await createDailyCronNotifications(notifications)
 
-  return NextResponse.json({ checked: expenses?.length ?? 0, overdue: overdueExpenses.length, notifications: notifications.length })
+  return NextResponse.json({ checked: expenses?.length ?? 0, overdue: overdueExpenses.length, notifications: insertedNotifications })
 }

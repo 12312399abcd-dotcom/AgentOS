@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { verifyCron } from '@/lib/services/cron'
-import { createNotifications, listFinanceRecipientIds } from '@/lib/services/notifications'
+import { createDailyCronNotifications, listFinanceRecipientIds } from '@/lib/services/notifications'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 function monthBounds(periodMonth: string) {
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
     })))
   }
 
-  await createNotifications(notifications)
+  const insertedNotifications = await createDailyCronNotifications(notifications)
 
-  return NextResponse.json({ activated: forecasts?.length ?? 0, notifications: notifications.length })
+  return NextResponse.json({ activated: forecasts?.length ?? 0, notifications: insertedNotifications })
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { csvResponse, toCsv, type CsvCell } from '@/lib/services/csv'
 import { getContentItems, parseContentFilters } from '@/lib/services/content-queries'
-import { getStatementRange, calculateIncomeStatement } from '@/lib/services/finance-statements'
+import { getStatementRange, calculateBalanceSheet, calculateIncomeStatement } from '@/lib/services/finance-statements'
 import { getOrganizationBySlug, getWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -11,7 +11,7 @@ type ExportRouteProps = {
 }
 
 const operationExports = new Set(['content', 'tasks', 'social'])
-const financeExports = new Set(['cashflow', 'forecast-variance', 'income-statement', 'tax-summary'])
+const financeExports = new Set(['cashflow', 'business-expenses', 'invoices', 'payroll', 'capital-loans', 'forecast-variance', 'income-statement', 'balance-sheet', 'tax-summary'])
 
 function monthBounds(month: string) {
   const [year, monthNumber] = month.split('-').map(Number)
@@ -26,6 +26,10 @@ function getClientName(value: unknown) {
   if (Array.isArray(value)) return value[0]?.name ?? ''
   if (typeof value === 'object' && 'name' in value) return String(value.name ?? '')
   return ''
+}
+
+function exportError(error: { message?: string } | null) {
+  return NextResponse.json({ error: error?.message ?? 'Export query failed' }, { status: 500 })
 }
 
 export async function GET(req: Request, { params }: ExportRouteProps) {
@@ -62,6 +66,10 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   const businessAccountId = url.searchParams.get('businessAccountId')
   const start = url.searchParams.get('start')
   const end = url.searchParams.get('end')
+  const dueStart = url.searchParams.get('dueStart')
+  const dueEnd = url.searchParams.get('dueEnd')
+  const periodMonth = url.searchParams.get('periodMonth')
+  const transactionType = url.searchParams.get('transactionType')
 
   if (exportType === 'content') {
     const items = await getContentItems(organization.id, parseContentFilters(Object.fromEntries(url.searchParams)))
@@ -90,7 +98,8 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     if (status) query = query.eq('status', status)
     if (requiredRole) query = query.eq('required_role', requiredRole)
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) return exportError(error)
 
     const rows = (data ?? []).map((task): CsvCell[] => [
       task.title,
@@ -114,13 +123,9 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
       .order('published_at', { ascending: false, nullsFirst: false })
 
     if (clientId) query = query.eq('client_id', clientId)
-    if (direction) query = query.eq('direction', direction)
-    if (category) query = query.ilike('category', `%${category}%`)
-    if (businessAccountId) query = query.eq('business_account_id', businessAccountId)
-    if (start) query = query.gte('transaction_date', start)
-    if (end) query = query.lte('transaction_date', end)
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) return exportError(error)
 
     const rows = (data ?? []).map((post): CsvCell[] => [
       getClientName(post.clients),
@@ -150,8 +155,14 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
       .order('transaction_date', { ascending: false })
 
     if (clientId) query = query.eq('client_id', clientId)
+    if (direction) query = query.eq('direction', direction)
+    if (category) query = query.ilike('category', `%${category}%`)
+    if (businessAccountId) query = query.eq('business_account_id', businessAccountId)
+    if (start) query = query.gte('transaction_date', start)
+    if (end) query = query.lte('transaction_date', end)
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) return exportError(error)
 
     const rows = (data ?? []).map((transaction): CsvCell[] => {
       const account = Array.isArray(transaction.business_accounts) ? transaction.business_accounts[0] : transaction.business_accounts
@@ -168,6 +179,130 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     })
 
     return csvResponse(`cashflow-${stamp}.csv`, toCsv(['Date', 'Direction', 'Category', 'Client/Vendor/Payee', 'Amount', 'Account', 'Payment Method', 'Notes'], rows))
+  }
+
+  if (exportType === 'business-expenses') {
+    let query = supabase
+      .from('business_expenses')
+      .select('expense_date, due_date, paid_date, category, vendor_name, description, amount, tax_amount, total_amount, status, clients(name)')
+      .eq('organization_id', organization.id)
+      .order('expense_date', { ascending: false })
+
+    if (clientId) query = query.eq('client_id', clientId)
+    if (status) query = query.eq('status', status)
+    if (category) query = query.ilike('category', `%${category}%`)
+    if (start) query = query.gte('expense_date', start)
+    if (end) query = query.lte('expense_date', end)
+
+    const { data, error } = await query
+    if (error) return exportError(error)
+    const rows = (data ?? []).map((expense): CsvCell[] => [
+      expense.expense_date,
+      expense.due_date,
+      expense.paid_date,
+      expense.category,
+      expense.vendor_name || getClientName(expense.clients) || 'Company-level',
+      expense.description,
+      expense.amount,
+      expense.tax_amount,
+      expense.total_amount,
+      expense.status
+    ])
+
+    return csvResponse(`business-expenses-${stamp}.csv`, toCsv(['Expense Date', 'Due Date', 'Paid Date', 'Category', 'Vendor/Client', 'Description', 'Amount', 'Tax', 'Total', 'Status'], rows))
+  }
+
+  if (exportType === 'invoices') {
+    let query = supabase
+      .from('invoices')
+      .select('invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, sent_at, paid_at, clients(name)')
+      .eq('organization_id', organization.id)
+      .order('created_at', { ascending: false })
+
+    if (clientId) query = query.eq('client_id', clientId)
+    if (status) query = query.eq('status', status)
+    if (dueStart) query = query.gte('due_date', dueStart)
+    if (dueEnd) query = query.lte('due_date', dueEnd)
+
+    const { data, error } = await query
+    if (error) return exportError(error)
+    const rows = (data ?? []).map((invoice): CsvCell[] => [
+      invoice.invoice_number,
+      getClientName(invoice.clients),
+      invoice.service_period_start,
+      invoice.service_period_end,
+      invoice.subtotal,
+      invoice.tax_rate,
+      invoice.tax_amount,
+      invoice.total_amount,
+      invoice.status,
+      invoice.due_date,
+      invoice.sent_at,
+      invoice.paid_at
+    ])
+
+    return csvResponse(`invoices-${stamp}.csv`, toCsv(['Invoice', 'Client', 'Service Start', 'Service End', 'Subtotal', 'Tax Rate', 'Tax Amount', 'Total', 'Status', 'Due Date', 'Sent At', 'Paid At'], rows))
+  }
+
+  if (exportType === 'payroll') {
+    let query = supabase
+      .from('payroll_cycles')
+      .select('period_month, payroll_due_date, total_gross_pay, total_net_pay, tax_withholding, status, paid_at, payroll_items(payee_name, payee_type, gross_amount, tax_amount, net_amount, payment_status, paid_date, profiles(full_name, email))')
+      .eq('organization_id', organization.id)
+      .order('period_month', { ascending: false })
+
+    if (periodMonth) query = query.eq('period_month', periodMonth)
+    if (status) query = query.eq('status', status)
+
+    const { data, error } = await query
+    if (error) return exportError(error)
+    const rows = (data ?? []).flatMap((cycle): CsvCell[][] =>
+      (cycle.payroll_items ?? []).map((item): CsvCell[] => {
+        const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles
+        return [
+          cycle.period_month,
+          cycle.payroll_due_date,
+          cycle.status,
+          cycle.total_gross_pay,
+          cycle.total_net_pay,
+          cycle.tax_withholding,
+          cycle.paid_at,
+          profile?.full_name ?? profile?.email ?? item.payee_name,
+          item.payee_type,
+          item.gross_amount,
+          item.tax_amount,
+          item.net_amount,
+          item.payment_status,
+          item.paid_date
+        ]
+      })
+    )
+
+    return csvResponse(`payroll-${stamp}.csv`, toCsv(['Period', 'Due Date', 'Cycle Status', 'Cycle Gross', 'Cycle Net', 'Cycle Tax', 'Cycle Paid At', 'Payee', 'Payee Type', 'Gross', 'Tax', 'Net', 'Payment Status', 'Paid Date'], rows))
+  }
+
+  if (exportType === 'capital-loans') {
+    let query = supabase
+      .from('capital_transactions')
+      .select('transaction_date, transaction_type, amount, counterparty, notes')
+      .eq('organization_id', organization.id)
+      .order('transaction_date', { ascending: false })
+
+    if (transactionType) query = query.eq('transaction_type', transactionType)
+    if (start) query = query.gte('transaction_date', start)
+    if (end) query = query.lte('transaction_date', end)
+
+    const { data, error } = await query
+    if (error) return exportError(error)
+    const rows = (data ?? []).map((transaction): CsvCell[] => [
+      transaction.transaction_date,
+      transaction.transaction_type,
+      transaction.counterparty,
+      transaction.amount,
+      transaction.notes
+    ])
+
+    return csvResponse(`capital-loans-${stamp}.csv`, toCsv(['Date', 'Type', 'Counterparty', 'Amount', 'Notes'], rows))
   }
 
   if (exportType === 'forecast-variance') {
@@ -196,7 +331,9 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
       cashflowQuery = cashflowQuery.ilike('category', `%${category}%`)
     }
 
-    const [{ data: items }, { data: cashflow }] = await Promise.all([forecastQuery, cashflowQuery])
+    const [{ data: items, error: forecastError }, { data: cashflow, error: cashflowError }] = await Promise.all([forecastQuery, cashflowQuery])
+    if (forecastError) return exportError(forecastError)
+    if (cashflowError) return exportError(cashflowError)
     const categories = new Set([...(items ?? []).map((item) => item.category), ...(cashflow ?? []).map((row) => row.category)])
     const rows = Array.from(categories).sort().map((category): CsvCell[] => {
       const forecast = (items ?? []).filter((item) => item.category === category).reduce((sum, item) => sum + Number(item.expected_amount), 0)
@@ -225,9 +362,36 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     return csvResponse(`income-statement-${stamp}.csv`, toCsv(['Line Item', 'Amount'], rows))
   }
 
+  if (exportType === 'balance-sheet') {
+    const sheet = await calculateBalanceSheet(organization.id, getStatementRange(Object.fromEntries(url.searchParams)))
+    const rows: CsvCell[][] = [
+      ['Assets', 'Cash', sheet.cash],
+      ['Assets', 'Accounts Receivable', sheet.accountsReceivable],
+      ['Assets', 'Prepaid Expenses', sheet.prepaidExpenses],
+      ['Assets', 'Equipment Assets', sheet.equipmentAssets],
+      ['Assets', 'Deposits', sheet.deposits],
+      ['Assets', 'Total Assets', sheet.totalAssets],
+      ['Liabilities', 'Accounts Payable', sheet.accountsPayable],
+      ['Liabilities', 'Tax Payable', sheet.taxPayable],
+      ['Liabilities', 'Payroll Payable', sheet.payrollPayable],
+      ['Liabilities', 'Loans Payable', sheet.loansPayable],
+      ['Liabilities', 'Unearned Revenue', sheet.unearnedRevenue],
+      ['Liabilities', 'Credit Card Payable', sheet.creditCardPayable],
+      ['Liabilities', 'Total Liabilities', sheet.totalLiabilities],
+      ['Equity', 'Owner Capital', sheet.ownerCapital],
+      ['Equity', 'Owner Draws', sheet.ownerDraws],
+      ['Equity', 'Retained Earnings', sheet.retainedEarnings],
+      ['Equity', 'Current Period Profit', sheet.currentPeriodProfit],
+      ['Equity', 'Total Equity', sheet.totalEquity],
+      ['Validation', 'Balance Status', sheet.balanceStatus]
+    ]
+
+    return csvResponse(`balance-sheet-${stamp}.csv`, toCsv(['Section', 'Line Item', 'Amount'], rows))
+  }
+
   const month = url.searchParams.get('month') ?? new Date().toISOString().slice(0, 7)
   const bounds = monthBounds(month)
-  const [{ data: transactions }, { data: settings }] = await Promise.all([
+  const [{ data: transactions, error: transactionsError }, { data: settings, error: settingsError }] = await Promise.all([
     supabase
       .from('cashflow_transactions')
       .select('direction, category, amount')
@@ -240,6 +404,8 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
       .eq('organization_id', organization.id)
       .single()
   ])
+  if (transactionsError) return exportError(transactionsError)
+  if (settingsError) return exportError(settingsError)
   const taxableRevenue = (transactions ?? [])
     .filter((row) => row.direction === 'money_in' && ['client_retainer', 'project_payment', 'consulting_fee', 'performance_fee', 'other_income'].includes(row.category))
     .reduce((sum, row) => sum + Number(row.amount), 0)

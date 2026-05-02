@@ -42,6 +42,56 @@ export async function createNotifications(inputs: NotificationInput[]) {
   if (error) throw new Error(error.message)
 }
 
+function notificationKey(input: NotificationInput) {
+  return [
+    input.organizationId,
+    input.userId,
+    input.type,
+    input.message ?? '',
+    input.linkUrl ?? ''
+  ].join('|')
+}
+
+export async function createDailyCronNotifications(inputs: NotificationInput[], now = new Date()) {
+  if (inputs.length === 0) return 0
+
+  const uniqueInputs = Array.from(
+    new Map(inputs.map((input) => [notificationKey(input), input])).values()
+  )
+  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()
+  const dayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+  const admin = createAdminClient()
+  const organizationIds = Array.from(new Set(uniqueInputs.map((input) => input.organizationId)))
+  const userIds = Array.from(new Set(uniqueInputs.map((input) => input.userId)))
+  const types = Array.from(new Set(uniqueInputs.map((input) => input.type)))
+
+  const { data: existing, error: existingError } = await admin
+    .from('notifications')
+    .select('organization_id, user_id, type, message, link_url')
+    .gte('created_at', dayStart)
+    .lt('created_at', dayEnd)
+    .in('organization_id', organizationIds)
+    .in('user_id', userIds)
+    .in('type', types)
+
+  if (existingError) throw new Error(existingError.message)
+
+  const existingKeys = new Set((existing ?? []).map((row) => notificationKey({
+    organizationId: row.organization_id,
+    userId: row.user_id,
+    type: row.type,
+    message: row.message ?? undefined,
+    linkUrl: row.link_url ?? undefined,
+    title: ''
+  })))
+  const missingInputs = uniqueInputs.filter((input) => !existingKeys.has(notificationKey(input)))
+
+  if (missingInputs.length === 0) return 0
+
+  await createNotifications(missingInputs)
+  return missingInputs.length
+}
+
 export async function getUnreadNotificationCount(organizationId: string) {
   const supabase = await createClient()
   const {

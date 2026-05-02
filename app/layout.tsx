@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Agency OS',
-  description: 'Supabase and Vercel operating system for agency work.'
+  title: 'Agency OS | Run your agency from one OS',
+  description: 'An operating system for agency delivery, content production, finance, and reporting.'
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

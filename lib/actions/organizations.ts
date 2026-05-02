@@ -463,7 +463,7 @@ export async function acceptInvitation(token: string) {
 
   const { data: invitation, error } = await admin
     .from('organization_invitations')
-    .select('id, organization_id, email, role, status, expires_at, organizations(slug)')
+    .select('id, organization_id, email, role, status, expires_at, organizations(slug, status)')
     .eq('token', token)
     .single()
 
@@ -481,6 +481,11 @@ export async function acceptInvitation(token: string) {
 
   if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
     throw new Error('Authenticated email does not match the invitation email')
+  }
+
+  const org = Array.isArray(invitation.organizations) ? invitation.organizations[0] : invitation.organizations
+  if (!org || org.status !== 'active') {
+    throw new Error('Organization is not active')
   }
 
   await admin.from('profiles').upsert({
@@ -514,7 +519,6 @@ export async function acceptInvitation(token: string) {
     new_data: { role: invitation.role }
   })
 
-  const org = Array.isArray(invitation.organizations) ? invitation.organizations[0] : invitation.organizations
   await startMemberSession(invitation.organization_id, user.id)
   redirect(resolveDefaultWorkspaceRoute(org.slug, invitation.role))
 }

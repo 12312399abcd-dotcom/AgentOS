@@ -34,6 +34,12 @@ supabase/migrations/0003_storage_buckets.sql
 supabase/migrations/0004_invoice_file_url.sql
 ```
 
+Detailed setup guide:
+
+```txt
+docs/supabase_setup.md
+```
+
 5. Run the app:
 
 ```bash
@@ -49,6 +55,12 @@ npm run verify
 ```
 
 This runs lint, static security checks, roadmap coverage checks, typecheck, and production build.
+
+Check Supabase environment readiness:
+
+```bash
+npm run supabase:check
+```
 
 ## Production Notes
 

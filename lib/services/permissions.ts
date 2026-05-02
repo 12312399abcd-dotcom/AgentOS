@@ -139,5 +139,11 @@ export async function listActiveMemberships() {
     throw new Error(error.message)
   }
 
-  return data ?? []
+  return (data ?? []).filter((membership) => {
+    const organization = Array.isArray(membership.organizations)
+      ? membership.organizations[0]
+      : membership.organizations
+
+    return organization?.status === 'active'
+  })
 }

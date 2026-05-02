@@ -16,10 +16,19 @@ export default async function BalanceSheetPage({ params, searchParams }: Balance
   const range = getStatementRange(filters)
   const sheet = await calculateBalanceSheet(organization.id, range)
   const defaultMonth = new Date().toISOString().slice(0, 7)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.month) exportParams.set('month', filters.month)
+  if (filters.quarter) exportParams.set('quarter', filters.quarter)
+  if (filters.year) exportParams.set('year', filters.year)
+  if (filters.start) exportParams.set('start', filters.start)
+  if (filters.end) exportParams.set('end', filters.end)
 
   return (
     <main className="shell">
       <h1>Balance Sheet</h1>
+      <div className="actions">
+        <a href={`/api/exports/balance-sheet?${exportParams.toString()}`}>Export CSV</a>
+      </div>
       <form className="filter-bar">
         <input name="month" pattern="\d{4}-\d{2}" placeholder="Month" defaultValue={filters.month ?? defaultMonth} />
         <input name="quarter" pattern="\d{4}-Q[1-4]" placeholder="2026-Q2" defaultValue={filters.quarter ?? ''} />

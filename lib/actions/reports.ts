@@ -67,6 +67,17 @@ export async function approveReport(input: ApproveReportInput) {
     throw new Error('Only admin or marketing can approve reports')
   }
 
+  const { data: report, error: readError } = await admin
+    .from('reports')
+    .select('id, status')
+    .eq('organization_id', parsed.organizationId)
+    .eq('id', parsed.reportId)
+    .single()
+
+  if (readError || !report) {
+    throw new Error('Report not found')
+  }
+
   const { error } = await admin
     .from('reports')
     .update({ status: 'approved', approved_at: new Date().toISOString() })
@@ -80,21 +91,23 @@ export async function approveReport(input: ApproveReportInput) {
     actor_id: member.user_id,
     entity_type: 'report',
     entity_id: parsed.reportId,
-    action: 'approved'
+    action: 'approved',
+    old_data: { status: report.status },
+    new_data: { status: 'approved' }
   })
 }
 
 export async function exportReportPdf(organizationId: string, reportId: string) {
   const member = await requireWorkspaceAccess(organizationId, 'operation')
   const admin = createAdminClient()
-  const { data: report } = await admin
+  const { data: report, error } = await admin
     .from('reports')
     .select('id, report_period, report_type, status, report_data, notes, clients(name)')
     .eq('organization_id', organizationId)
     .eq('id', reportId)
     .single()
 
-  if (!report) throw new Error('Report not found')
+  if (error || !report) throw new Error('Report not found')
   if (member.role === 'viewer' && report.status !== 'approved') {
     throw new Error('Viewer can only export approved reports')
   }

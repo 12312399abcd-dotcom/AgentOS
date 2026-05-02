@@ -38,10 +38,7 @@ on storage.objects
 for select
 using (
   bucket_id = 'reports'
-  and (
-    public.has_operation_access((storage.foldername(name))[1]::uuid)
-    or public.has_finance_access((storage.foldername(name))[1]::uuid)
-  )
+  and public.current_org_role((storage.foldername(name))[1]::uuid) in ('admin', 'marketing', 'channel_manager')
 );
 
 create policy "org_report_file_upload"

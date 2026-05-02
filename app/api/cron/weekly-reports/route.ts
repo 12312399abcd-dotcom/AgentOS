@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { verifyCron } from '@/lib/services/cron'
-import { createNotifications, listOperationRecipientIds } from '@/lib/services/notifications'
+import { createDailyCronNotifications, listOperationRecipientIds } from '@/lib/services/notifications'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 function isoWeekPeriod(date: Date) {
@@ -82,7 +82,7 @@ export async function GET(req: Request) {
     })))
   }
 
-  await createNotifications(notifications)
+  const insertedNotifications = await createDailyCronNotifications(notifications)
 
-  return NextResponse.json({ reports: reportRows.length, notifications: notifications.length })
+  return NextResponse.json({ reports: reportRows.length, notifications: insertedNotifications })
 }

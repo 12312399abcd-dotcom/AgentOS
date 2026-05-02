@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
+import { getOrganizationBySlug, requireAdmin } from '@/lib/services/permissions'
 
 type WorkspacePageProps = {
   params: Promise<{ orgSlug: string }>
@@ -14,7 +14,7 @@ export default async function WorkspacePage({ params }: WorkspacePageProps) {
     return null
   }
 
-  await requireWorkspaceAccess(organization.id, 'operation')
+  await requireAdmin(organization.id)
 
   return (
     <main className="shell">

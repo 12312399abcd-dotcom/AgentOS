@@ -55,10 +55,16 @@ export default async function PayrollPage({ params, searchParams }: PayrollPageP
   const projectedCashAfterPayroll = currentCash - payrollDue
   const payrollRisk = payrollGap < 0 ? 'critical' : projectedCashAfterPayroll < minimumReserve ? 'high' : 'normal'
   const defaultMonth = new Date().toISOString().slice(0, 7)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.periodMonth) exportParams.set('periodMonth', filters.periodMonth)
+  if (filters.status) exportParams.set('status', filters.status)
 
   return (
     <main className="shell">
       <h1>Payroll</h1>
+      <div className="actions">
+        <a href={`/api/exports/payroll?${exportParams.toString()}`}>Export CSV</a>
+      </div>
       <div className="grid">
         <div className="card"><strong>Current Cash</strong><p>{currentCash.toLocaleString()}</p></div>
         <div className="card"><strong>Payroll Due</strong><p>{payrollDue.toLocaleString()}</p></div>

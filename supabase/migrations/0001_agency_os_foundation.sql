@@ -590,12 +590,18 @@ create policy "finance_access_payroll_cycles" on public.payroll_cycles for all u
 create policy "finance_access_payroll_items" on public.payroll_items for all using (public.has_finance_access(organization_id)) with check (public.has_finance_access(organization_id));
 
 create policy "users_read_own_sessions" on public.member_sessions for select using (user_id = auth.uid() or public.is_org_admin(organization_id));
-create policy "users_manage_own_sessions" on public.member_sessions for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "users_manage_own_sessions" on public.member_sessions for all using (user_id = auth.uid() and public.is_org_member(organization_id)) with check (user_id = auth.uid() and public.is_org_member(organization_id));
 
 create policy "users_read_own_notifications" on public.notifications for select using (user_id = auth.uid());
 create policy "users_update_own_notifications" on public.notifications for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-create policy "operation_read_reports" on public.reports for select using (public.has_operation_access(organization_id));
+create policy "operation_read_reports" on public.reports for select using (
+  public.current_org_role(organization_id) in ('admin', 'designer', 'editor', 'marketing', 'channel_manager')
+  or (
+    public.current_org_role(organization_id) = 'viewer'
+    and status = 'approved'
+  )
+);
 create policy "operation_manage_reports" on public.reports for all using (public.current_org_role(organization_id) in ('admin', 'marketing')) with check (public.current_org_role(organization_id) in ('admin', 'marketing'));
 
 create policy "members_read_audit_logs" on public.audit_logs for select using (public.is_org_admin(organization_id));

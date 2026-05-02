@@ -31,6 +31,19 @@ function collectInvoiceItems(formData: FormData): InvoiceItemInput[] {
     .filter((item) => item.description && item.quantity > 0)
 }
 
+async function assertBusinessAccountBelongsToOrg(admin: ReturnType<typeof createAdminClient>, organizationId: string, accountId?: string) {
+  if (!accountId) return
+
+  const { data } = await admin
+    .from('business_accounts')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('id', accountId)
+    .maybeSingle()
+
+  if (!data) throw new Error('Business account does not belong to this organization')
+}
+
 async function nextInvoiceNumber(admin: ReturnType<typeof createAdminClient>, organizationId: string) {
   const { count } = await admin
     .from('invoices')
@@ -109,14 +122,14 @@ export async function updateInvoiceStatus(input: UpdateInvoiceStatusInput) {
   const updates: Record<string, string | null> = { status: parsed.status }
   if (parsed.status === 'sent') updates.sent_at = new Date().toISOString()
 
-  const { data: invoice } = await admin
+  const { data: invoice, error: readError } = await admin
     .from('invoices')
     .select('id, status')
     .eq('organization_id', parsed.organizationId)
     .eq('id', parsed.invoiceId)
     .single()
 
-  if (!invoice) throw new Error('Invoice not found')
+  if (readError || !invoice) throw new Error('Invoice not found')
   if (invoice.status === 'paid' && parsed.status !== 'cancelled') {
     throw new Error('Paid invoices cannot be moved by status update')
   }
@@ -143,15 +156,16 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput) {
   const parsed = markInvoicePaidSchema.parse(input)
   const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
   const admin = createAdminClient()
+  await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
 
-  const { data: invoice } = await admin
+  const { data: invoice, error } = await admin
     .from('invoices')
     .select('id, client_id, invoice_number, total_amount, status')
     .eq('organization_id', parsed.organizationId)
     .eq('id', parsed.invoiceId)
     .single()
 
-  if (!invoice) throw new Error('Invoice not found')
+  if (error || !invoice) throw new Error('Invoice not found')
   if (invoice.status === 'cancelled') throw new Error('Cancelled invoices cannot be paid')
   await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.paidDate)
 
@@ -199,14 +213,14 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput) {
 export async function exportInvoicePdf(organizationId: string, invoiceId: string) {
   const member = await requireWorkspaceAccess(organizationId, 'finance')
   const admin = createAdminClient()
-  const { data: invoice } = await admin
+  const { data: invoice, error } = await admin
     .from('invoices')
     .select('id, invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, clients(name, contact_email), invoice_items(description, quantity, unit_price, line_total)')
     .eq('organization_id', organizationId)
     .eq('id', invoiceId)
     .single()
 
-  if (!invoice) throw new Error('Invoice not found')
+  if (error || !invoice) throw new Error('Invoice not found')
 
   const client = Array.isArray(invoice.clients) ? invoice.clients[0] : invoice.clients
   const lines = [

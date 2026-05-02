@@ -38,10 +38,18 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
   const exportAction = exportInvoicePdfFromForm.bind(null, organization.id, orgSlug)
   const unpaid = (invoices ?? []).filter((invoice) => ['draft', 'sent', 'partial_paid', 'overdue'].includes(invoice.status))
   const accountsReceivable = unpaid.filter((invoice) => invoice.status !== 'draft').reduce((sum, invoice) => sum + Number(invoice.total_amount), 0)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
+  if (filters.status) exportParams.set('status', filters.status)
+  if (filters.dueStart) exportParams.set('dueStart', filters.dueStart)
+  if (filters.dueEnd) exportParams.set('dueEnd', filters.dueEnd)
 
   return (
     <main className="shell">
       <h1>Invoices</h1>
+      <div className="actions">
+        <a href={`/api/exports/invoices?${exportParams.toString()}`}>Export CSV</a>
+      </div>
       <div className="grid">
         <div className="card"><strong>Unpaid Invoices</strong><p>{unpaid.length}</p></div>
         <div className="card"><strong>Accounts Receivable</strong><p>{accountsReceivable.toLocaleString()}</p></div>

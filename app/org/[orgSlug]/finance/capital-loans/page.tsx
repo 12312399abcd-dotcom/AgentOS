@@ -48,10 +48,17 @@ export default async function CapitalLoansPage({ params, searchParams }: Capital
   const loanRepayments = rows.filter((row) => row.transaction_type === 'loan_repayment').reduce((sum, row) => sum + Number(row.amount), 0)
   const dividends = rows.filter((row) => row.transaction_type === 'dividend_distribution').reduce((sum, row) => sum + Number(row.amount), 0)
   const outstandingDebt = loansReceived - loanRepayments
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.transactionType) exportParams.set('transactionType', filters.transactionType)
+  if (filters.start) exportParams.set('start', filters.start)
+  if (filters.end) exportParams.set('end', filters.end)
 
   return (
     <main className="shell">
       <h1>Capital / Loans</h1>
+      <div className="actions">
+        <a href={`/api/exports/capital-loans?${exportParams.toString()}`}>Export CSV</a>
+      </div>
       <div className="grid">
         <div className="card"><strong>Owner Capital</strong><p>{ownerCapital.toLocaleString()}</p></div>
         <div className="card"><strong>Owner Draws</strong><p>{ownerDraws.toLocaleString()}</p></div>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { verifyCron } from '@/lib/services/cron'
-import { createNotifications, listAdminRecipientIds } from '@/lib/services/notifications'
+import { createDailyCronNotifications, listAdminRecipientIds } from '@/lib/services/notifications'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: Request) {
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
     }
   }
 
-  await createNotifications(notifications)
+  const insertedNotifications = await createDailyCronNotifications(notifications)
 
-  return NextResponse.json({ sessions: sessions?.length ?? 0, warnings: warningSessions.length, notifications: notifications.length })
+  return NextResponse.json({ sessions: sessions?.length ?? 0, warnings: warningSessions.length, notifications: insertedNotifications })
 }

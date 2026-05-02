@@ -95,6 +95,8 @@ npm run build
 24. Confirm Finance Dashboard values update.
 25. Close a financial period in a test month.
 26. Confirm audit logs show the above actions.
+27. Verify Viewer can open approved reports but cannot read draft reports through the anon Supabase client.
+28. Verify report files are private in Storage and are only exposed through app-generated signed URLs after report permission checks.
 
 ## Launch Criteria
 
@@ -109,5 +111,6 @@ Agency OS is ready for MVP launch when:
 - Operation workspace is inaccessible to Finance Moderator.
 - Cron endpoints are protected.
 - Storage files are private and served through signed URLs.
+- Viewer access to reports is limited to approved reports at both app and RLS level.
 - Audit logs capture sensitive business actions.
 - The QA plan in `docs/qa_security_test_plan.md` has been run at least once.

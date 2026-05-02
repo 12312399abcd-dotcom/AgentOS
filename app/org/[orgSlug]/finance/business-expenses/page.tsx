@@ -38,10 +38,19 @@ export default async function BusinessExpensesPage({ params, searchParams }: Bus
   const paidAction = markBusinessExpensePaidFromForm.bind(null, organization.id, orgSlug)
   const unpaid = (expenses ?? []).filter((expense) => ['unpaid', 'scheduled', 'overdue'].includes(expense.status))
   const totalPayable = unpaid.reduce((sum, expense) => sum + Number(expense.total_amount), 0)
+  const exportParams = new URLSearchParams({ orgSlug })
+  if (filters.clientId) exportParams.set('clientId', filters.clientId)
+  if (filters.status) exportParams.set('status', filters.status)
+  if (filters.category) exportParams.set('category', filters.category)
+  if (filters.start) exportParams.set('start', filters.start)
+  if (filters.end) exportParams.set('end', filters.end)
 
   return (
     <main className="shell">
       <h1>Business Expenses</h1>
+      <div className="actions">
+        <a href={`/api/exports/business-expenses?${exportParams.toString()}`}>Export CSV</a>
+      </div>
       <div className="grid">
         <div className="card"><strong>Open Expenses</strong><p>{unpaid.length}</p></div>
         <div className="card"><strong>Accounts Payable</strong><p>{totalPayable.toLocaleString()}</p></div>

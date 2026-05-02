@@ -43,6 +43,19 @@ async function assertClientBelongsToOrg(admin: ReturnType<typeof createAdminClie
   if (!data) throw new Error('Client does not belong to this organization')
 }
 
+async function assertInvoiceBelongsToOrg(admin: ReturnType<typeof createAdminClient>, organizationId: string, invoiceId?: string) {
+  if (!invoiceId) return
+
+  const { data } = await admin
+    .from('invoices')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('id', invoiceId)
+    .maybeSingle()
+
+  if (!data) throw new Error('Invoice does not belong to this organization')
+}
+
 async function getCurrentCash(admin: ReturnType<typeof createAdminClient>, organizationId: string) {
   const [{ data: accounts }, { data: transactions }] = await Promise.all([
     admin
@@ -127,6 +140,7 @@ export async function addCashflowTransaction(input: CashflowTransactionInput) {
   const admin = createAdminClient()
   await assertBusinessAccountBelongsToOrg(admin, parsed.organizationId, parsed.businessAccountId)
   await assertClientBelongsToOrg(admin, parsed.organizationId, parsed.clientId)
+  await assertInvoiceBelongsToOrg(admin, parsed.organizationId, parsed.invoiceId)
   await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.transactionDate)
 
   if (parsed.direction === 'money_out') {
@@ -178,6 +192,11 @@ export async function addBusinessExpense(input: BusinessExpenseInput) {
   await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.expenseDate)
 
   const totalAmount = parsed.amount + parsed.taxAmount
+  if (parsed.status === 'paid') {
+    await assertFinancialPeriodEditable(admin, parsed.organizationId, parsed.paidDate ?? parsed.expenseDate)
+    await assertMoneyOutAllowed(admin, parsed.organizationId, totalAmount, member.role)
+  }
+
   const { data: expense, error } = await admin
     .from('business_expenses')
     .insert({
@@ -243,6 +262,7 @@ export async function markBusinessExpensePaid(input: MarkBusinessExpensePaidInpu
 
   if (error || !expense) throw new Error('Expense not found')
   if (expense.status === 'cancelled') throw new Error('Cancelled expenses cannot be paid')
+  await assertMoneyOutAllowed(admin, parsed.organizationId, Number(expense.total_amount), member.role)
 
   const { error: updateError } = await admin
     .from('business_expenses')

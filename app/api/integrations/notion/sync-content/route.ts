@@ -58,35 +58,58 @@ async function resolveClientId(
 ) {
   const clientId = rowClientId ?? fallbackClientId
   if (clientId) {
-    const { data: client } = await admin
+    const { data: client, error } = await admin
       .from('clients')
       .select('id')
       .eq('organization_id', organizationId)
       .eq('id', clientId)
       .maybeSingle()
 
+    if (error) throw new Error(error.message)
     return client?.id ?? null
   }
 
   if (!clientName) return null
 
-  const { data: client } = await admin
+  const { data: client, error } = await admin
     .from('clients')
     .select('id')
     .eq('organization_id', organizationId)
     .ilike('name', clientName)
     .maybeSingle()
 
+  if (error) throw new Error(error.message)
   return client?.id ?? null
 }
 
-async function createMissingProductionTasks(
+async function resolveMemberUserId(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  userId: string | undefined
+) {
+  if (!userId) return undefined
+
+  const { data: member, error } = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return member?.user_id
+}
+
+async function syncProductionTasks(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
   clientId: string,
   contentItemId: string,
   createdBy: string,
-  row: z.infer<typeof notionRowSchema>
+  row: z.infer<typeof notionRowSchema>,
+  ownerId: string | undefined,
+  reviewerId: string | undefined
 ) {
   if (!row.publishDate) return 0
 
@@ -100,8 +123,8 @@ async function createMissingProductionTasks(
     brief: row.creativeBrief,
     assetUrl: row.assetLink ?? '',
     publishDate: row.publishDate,
-    ownerId: row.ownerId,
-    reviewerId: row.reviewerId,
+    ownerId,
+    reviewerId,
     requiresDesign: row.requiresDesign,
     requiresEditing: row.requiresEditing,
     requiresChannelManager: row.requiresChannelManager,
@@ -111,12 +134,32 @@ async function createMissingProductionTasks(
 
   if (desiredTasks.length === 0) return 0
 
-  const { data: existingTasks } = await admin
+  const { data: existingTasks, error: existingTasksError } = await admin
     .from('tasks')
-    .select('required_role')
+    .select('id, required_role, status')
     .eq('organization_id', organizationId)
     .eq('content_item_id', contentItemId)
-    .eq('booking_source', 'notion_sync')
+
+  if (existingTasksError) throw new Error(existingTasksError.message)
+
+  const existingByRole = new Map((existingTasks ?? []).map((task) => [task.required_role, task]))
+  const taskUpdates = desiredTasks.flatMap((task) => {
+    const existing = existingByRole.get(task.required_role)
+    return existing && existing.status !== 'completed' ? [{ desired: task, existing }] : []
+  })
+
+  for (const item of taskUpdates) {
+    const { error: updateError } = await admin
+      .from('tasks')
+      .update({
+        due_date: item.desired.due_date,
+        production_risk: item.desired.production_risk
+      })
+      .eq('organization_id', organizationId)
+      .eq('id', item.existing.id)
+
+    if (updateError) throw new Error(updateError.message)
+  }
 
   const existingRoles = new Set((existingTasks ?? []).map((task) => task.required_role))
   const missingTasks = desiredTasks.filter((task) => !existingRoles.has(task.required_role))
@@ -135,6 +178,8 @@ async function createMissingProductionTasks(
       booking_source: 'notion_sync',
       production_risk: task.production_risk,
       status: 'assigned',
+      owner_id: ownerId,
+      reviewer_id: reviewerId,
       created_by: createdBy
     }))
   )
@@ -144,7 +189,13 @@ async function createMissingProductionTasks(
 }
 
 export async function POST(req: Request) {
-  const body = notionSyncSchema.parse(await req.json())
+  const parsedBody = notionSyncSchema.safeParse(await req.json())
+
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.flatten() }, { status: 400 })
+  }
+
+  const body = parsedBody.data
   const access = await getWorkspaceAccess(body.organizationId, 'operation')
 
   if (!access.member) {
@@ -180,12 +231,14 @@ export async function POST(req: Request) {
         preview.push({ notionPageId: row.notionPageId, action: 'map_without_booking', reason: 'missing_publish_date' })
       }
 
-      const { data: existing } = await admin
+      const { data: existing, error: existingError } = await admin
         .from('content_items')
         .select('id')
         .eq('organization_id', body.organizationId)
         .eq('notion_page_id', row.notionPageId)
         .maybeSingle()
+
+      if (existingError) throw new Error(existingError.message)
 
       const action = existing ? 'update' : 'import'
       preview.push({ notionPageId: row.notionPageId, title: row.title, clientId, action })
@@ -200,6 +253,8 @@ export async function POST(req: Request) {
         continue
       }
 
+      const ownerId = await resolveMemberUserId(admin, body.organizationId, row.ownerId) ?? member.user_id
+      const reviewerId = await resolveMemberUserId(admin, body.organizationId, row.reviewerId)
       const payload = {
         organization_id: body.organizationId,
         client_id: clientId,
@@ -211,8 +266,8 @@ export async function POST(req: Request) {
         asset_url: row.assetLink || null,
         publish_date: row.publishDate,
         status: row.status ?? (row.publishDate ? 'scheduled' : 'planned'),
-        owner_id: row.ownerId ?? member.user_id,
-        reviewer_id: row.reviewerId,
+        owner_id: ownerId,
+        reviewer_id: reviewerId,
         notion_page_id: row.notionPageId,
         notion_source_url: row.notionSourceUrl,
         synced_from: 'notion',
@@ -228,7 +283,7 @@ export async function POST(req: Request) {
       }
 
       const { data: contentItem, error } = existing
-        ? await admin.from('content_items').update(payload).eq('id', existing.id).select('id').single()
+        ? await admin.from('content_items').update(payload).eq('organization_id', body.organizationId).eq('id', existing.id).select('id').single()
         : await admin.from('content_items').insert(payload).select('id').single()
 
       if (error || !contentItem) throw new Error(error?.message ?? 'Failed to sync content item')
@@ -236,14 +291,14 @@ export async function POST(req: Request) {
       if (existing) updatedCount += 1
       else importedCount += 1
 
-      taskCount += await createMissingProductionTasks(admin, body.organizationId, clientId, contentItem.id, member.user_id, row)
+      taskCount += await syncProductionTasks(admin, body.organizationId, clientId, contentItem.id, member.user_id, row, ownerId, reviewerId)
     } catch {
       errorCount += 1
     }
   }
 
   const status = body.syncMode === 'preview' ? 'previewed' : errorCount > 0 ? 'partial_failed' : 'completed'
-  await admin.from('notion_sync_logs').insert({
+  const { error: logError } = await admin.from('notion_sync_logs').insert({
     organization_id: body.organizationId,
     notion_database_id: body.notionDatabaseId,
     client_id: body.clientId,
@@ -255,6 +310,10 @@ export async function POST(req: Request) {
     status,
     created_by: member.user_id
   })
+
+  if (logError) {
+    return NextResponse.json({ error: logError.message }, { status: 500 })
+  }
 
   return NextResponse.json({
     syncMode: body.syncMode,

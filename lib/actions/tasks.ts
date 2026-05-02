@@ -60,8 +60,25 @@ async function assertTaskBelongsToOrg(admin: ReturnType<typeof createAdminClient
   }
 }
 
+async function assertMemberBelongsToOrg(admin: ReturnType<typeof createAdminClient>, organizationId: string, userId?: string) {
+  if (!userId) return
+
+  const { data } = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!data) {
+    throw new Error('Assigned user does not belong to this organization')
+  }
+}
+
 async function syncContentStatusFromTask(
   admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
   task: { content_item_id: string | null; task_type: string | null; required_role: string | null },
   nextStatus: string
 ) {
@@ -89,7 +106,11 @@ async function syncContentStatusFromTask(
 
   if (!contentStatus) return
 
-  await admin.from('content_items').update({ status: contentStatus }).eq('id', task.content_item_id)
+  await admin
+    .from('content_items')
+    .update({ status: contentStatus })
+    .eq('organization_id', organizationId)
+    .eq('id', task.content_item_id)
 }
 
 export async function createTask(input: CreateTaskInput) {
@@ -99,6 +120,8 @@ export async function createTask(input: CreateTaskInput) {
   await assertClientBelongsToOrg(admin, parsed.organizationId, parsed.clientId)
   await assertContentBelongsToOrg(admin, parsed.organizationId, parsed.contentItemId)
   await assertTaskBelongsToOrg(admin, parsed.organizationId, parsed.dependencyTaskId)
+  await assertMemberBelongsToOrg(admin, parsed.organizationId, parsed.ownerId)
+  await assertMemberBelongsToOrg(admin, parsed.organizationId, parsed.reviewerId)
 
   const { data: task, error } = await admin
     .from('tasks')
@@ -194,7 +217,7 @@ export async function updateTaskStatus(input: UpdateTaskStatusInput) {
     throw new Error(updateError.message)
   }
 
-  await syncContentStatusFromTask(admin, task, parsed.nextStatus)
+  await syncContentStatusFromTask(admin, parsed.organizationId, task, parsed.nextStatus)
 
   await admin.from('audit_logs').insert({
     organization_id: parsed.organizationId,
@@ -226,6 +249,9 @@ export async function assignTask(input: AssignTaskInput) {
   if (task.status === 'archived' && member.role !== 'admin') {
     throw new Error('Archived tasks can only be changed by admin')
   }
+
+  await assertMemberBelongsToOrg(admin, parsed.organizationId, parsed.ownerId)
+  await assertMemberBelongsToOrg(admin, parsed.organizationId, parsed.reviewerId)
 
   const { error: updateError } = await admin
     .from('tasks')
