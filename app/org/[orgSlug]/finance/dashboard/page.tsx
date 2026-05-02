@@ -5,6 +5,13 @@ type FinanceDashboardProps = {
   params: Promise<{ orgSlug: string }>
 }
 
+type RiskFlag = {
+  severity: 'info' | 'warning' | 'error'
+  title: string
+  detail: string
+  href: string
+}
+
 const chartColors = ['#2f6b4f', '#6f8f72', '#d49a3a', '#7b8ea3', '#a65f4d', '#4c6a92']
 
 function money(value: number) {
@@ -202,6 +209,64 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
           : accountsReceivable > accountsPayable
             ? 'Công nợ khách hàng có thể bù hóa đơn cần trả'
             : 'Dòng tiền đang ổn'
+  const riskFlags: RiskFlag[] = [
+    ...(allTransactions.length === 0
+      ? [{
+          severity: 'info' as const,
+          title: 'Chưa có giao dịch',
+          detail: 'Bắt đầu bằng cách ghi khoản thu hoặc chi đầu tiên trong Sổ thu chi.',
+          href: `/org/${orgSlug}/finance/journal`
+        }]
+      : []),
+    ...(!forecast
+      ? [{
+          severity: 'warning' as const,
+          title: 'Chưa có ngân sách tháng này',
+          detail: 'Tạo ngân sách để hệ thống biết tháng này dự kiến thu, chi và thiếu hụt bao nhiêu.',
+          href: `/org/${orgSlug}/finance/forecast-budget`
+        }]
+      : []),
+    ...(cashGap < 0
+      ? [{
+          severity: 'error' as const,
+          title: 'Dòng tiền dưới mức an toàn',
+          detail: `Dự kiến thiếu ${money(Math.abs(cashGap))} so với mức dự phòng tối thiểu.`,
+          href: `/org/${orgSlug}/finance/cashflow`
+        }]
+      : []),
+    ...(payrollGap < 0
+      ? [{
+          severity: 'error' as const,
+          title: 'Có rủi ro thiếu tiền payroll',
+          detail: `Payroll đang thiếu ${money(Math.abs(payrollGap))}. Cần thu tiền hoặc giảm chi trước hạn trả.`,
+          href: `/org/${orgSlug}/finance/payroll`
+        }]
+      : []),
+    ...(overdueReceivables.length > 0
+      ? [{
+          severity: 'warning' as const,
+          title: 'Có hóa đơn khách quá hạn',
+          detail: `${overdueReceivables.length} hóa đơn cần follow up để cải thiện dòng tiền.`,
+          href: `/org/${orgSlug}/finance/invoices`
+        }]
+      : []),
+    ...(overdueExpenses.length > 0
+      ? [{
+          severity: 'warning' as const,
+          title: 'Có khoản chi quá hạn',
+          detail: `${overdueExpenses.length} khoản cần trả đang quá hạn.`,
+          href: `/org/${orgSlug}/finance/journal`
+        }]
+      : []),
+    ...(expectedMoneyOut > 0 && moneyOut > expectedMoneyOut
+      ? [{
+          severity: 'warning' as const,
+          title: 'Chi phí đã vượt ngân sách',
+          detail: `Đã chi vượt forecast ${money(moneyOut - expectedMoneyOut)} trong tháng này.`,
+          href: `/org/${orgSlug}/finance/forecast-budget`
+        }]
+      : [])
+  ]
 
   return (
     <main className="shell finance-hkd">
@@ -263,6 +328,22 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
           <p><strong>Payroll gap:</strong> {payrollGap.toLocaleString()} · {payrollRisk}</p>
           <p><strong>Tax still needed:</strong> {Math.max(taxReserveNeeded - taxPaid, 0).toLocaleString()}</p>
           <p><strong>Forecast variance:</strong> {forecastVariance.toLocaleString()}</p>
+        </div>
+      </section>
+      <section className="card">
+        <h2>Việc cần xử lý</h2>
+        <div className="risk-flag-list">
+          {riskFlags.length > 0 ? riskFlags.map((flag) => (
+            <a className={`risk-flag risk-${flag.severity}`} href={flag.href} key={flag.title}>
+              <strong>{flag.title}</strong>
+              <span>{flag.detail}</span>
+            </a>
+          )) : (
+            <div className="risk-flag risk-info">
+              <strong>Không có cảnh báo lớn</strong>
+              <span>Dữ liệu hiện tại chưa cho thấy vấn đề cần xử lý ngay.</span>
+            </div>
+          )}
         </div>
       </section>
       <section className="dashboard-chart-grid">

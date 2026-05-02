@@ -9,20 +9,37 @@ import { createClient } from '@/lib/supabase/server'
 
 type JournalPageProps = {
   params: Promise<{ orgSlug: string }>
+  searchParams: Promise<{ type?: string; search?: string }>
 }
 
 function money(value: number) {
   return value.toLocaleString()
 }
 
-export default async function JournalPage({ params }: JournalPageProps) {
+export default async function JournalPage({ params, searchParams }: JournalPageProps) {
   const { orgSlug } = await params
+  const filters = await searchParams
   const organization = await getOrganizationBySlug(orgSlug)
 
   if (!organization) return null
 
   await requireWorkspaceAccess(organization.id, 'finance')
   const supabase = await createClient()
+  let recentTransactionsQuery = supabase
+    .from('cashflow_transactions')
+    .select('id, transaction_date, direction, category, amount, vendor_name, payee_name, notes')
+    .eq('organization_id', organization.id)
+    .order('transaction_date', { ascending: false })
+    .limit(40)
+
+  if (filters.type === 'income') recentTransactionsQuery = recentTransactionsQuery.eq('direction', 'money_in')
+  if (filters.type === 'expense') recentTransactionsQuery = recentTransactionsQuery.eq('direction', 'money_out')
+  if (filters.search) {
+    recentTransactionsQuery = recentTransactionsQuery.or(
+      `category.ilike.%${filters.search}%,vendor_name.ilike.%${filters.search}%,payee_name.ilike.%${filters.search}%,notes.ilike.%${filters.search}%`
+    )
+  }
+
   const [{ data: clients }, { data: accounts }, { data: openExpenses }, { data: recentTransactions }] = await Promise.all([
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
     supabase.from('business_accounts').select('id, account_name').eq('organization_id', organization.id).eq('status', 'active').order('account_name'),
@@ -33,12 +50,7 @@ export default async function JournalPage({ params }: JournalPageProps) {
       .in('status', ['unpaid', 'scheduled', 'overdue'])
       .order('due_date', { ascending: true })
       .limit(20),
-    supabase
-      .from('cashflow_transactions')
-      .select('id, transaction_date, direction, category, amount, vendor_name, payee_name')
-      .eq('organization_id', organization.id)
-      .order('transaction_date', { ascending: false })
-      .limit(12)
+    recentTransactionsQuery
   ])
   const addExpenseAction = addBusinessExpenseFromForm.bind(null, organization.id, orgSlug)
   const addIncomeAction = addCashflowTransactionFromForm.bind(null, organization.id, orgSlug)
@@ -183,6 +195,26 @@ export default async function JournalPage({ params }: JournalPageProps) {
       </section>
       <section>
         <h2>Giao dịch gần đây</h2>
+        <form className="journal-filter-bar">
+          <div>
+            {[
+              ['all', 'Tất cả'],
+              ['income', 'Thu nhập'],
+              ['expense', 'Chi phí']
+            ].map(([value, label]) => (
+              <a
+                className={(filters.type ?? 'all') === value ? 'is-active' : ''}
+                href={value === 'all' ? `/org/${orgSlug}/finance/journal` : `/org/${orgSlug}/finance/journal?type=${value}`}
+                key={value}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+          <input name="search" placeholder="Tìm category, nhà cung cấp, ghi chú..." defaultValue={filters.search ?? ''} />
+          {filters.type ? <input type="hidden" name="type" value={filters.type} /> : null}
+          <button type="submit">Tìm</button>
+        </form>
         <div className="transaction-feed">
           {(recentTransactions ?? []).map((transaction) => (
             <article className="transaction-row" key={transaction.id}>

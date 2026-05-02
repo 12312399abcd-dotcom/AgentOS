@@ -1366,14 +1366,14 @@ button:disabled {
 }
 
 .chart-bar-row div {
-  background: #eef3f0;
+  background: #f0ece6;
   border-radius: 999px;
   height: 12px;
   overflow: hidden;
 }
 
 .chart-bar-row i {
-  background: linear-gradient(90deg, var(--accent), #254b3f);
+  background: linear-gradient(90deg, #e85d2c, #f2a14b);
   border-radius: inherit;
   display: block;
   height: 100%;
@@ -1398,8 +1398,38 @@ button:disabled {
 }
 
 .finance-hkd {
+  background:
+    radial-gradient(circle at 0 0, rgba(232, 93, 44, 0.08), transparent 34rem),
+    linear-gradient(180deg, #fffaf2, #f7f3ea 42%, #f5f4f0);
+  border-radius: 24px;
+  max-width: 1220px;
+  padding: 34px;
   --accent: #e85d2c;
   --accent-strong: #b83c15;
+  --muted: #6b6560;
+}
+
+.finance-hkd .card,
+.finance-hkd .table-wrap,
+.finance-hkd .transaction-feed {
+  border-color: #e8e4de;
+  border-radius: 22px;
+  box-shadow: 0 12px 28px rgba(26, 24, 20, 0.06);
+}
+
+.finance-hkd input,
+.finance-hkd select,
+.finance-hkd textarea {
+  border: 2px solid #e8e4de;
+  border-radius: 14px;
+  font-weight: 750;
+}
+
+.finance-hkd button {
+  background: #1a1814;
+  border-radius: 14px;
+  box-shadow: 0 12px 24px rgba(26, 24, 20, 0.14);
+  font-weight: 950;
 }
 
 .finance-hero-row {
@@ -1418,7 +1448,7 @@ button:disabled {
 
 .finance-primary-action {
   background: #e85d2c;
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: 0 16px 32px rgba(232, 93, 44, 0.18);
   color: #ffffff;
   font-weight: 950;
@@ -1476,6 +1506,12 @@ button:disabled {
 .finance-question-card {
   display: grid;
   gap: 8px;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.finance-question-card:hover {
+  border-color: rgba(232, 93, 44, 0.36);
+  transform: translateY(-2px);
 }
 
 .finance-question-card span {
@@ -1484,7 +1520,7 @@ button:disabled {
 }
 
 .finance-question-card strong {
-  color: var(--foreground);
+  color: #1a1814;
   font-size: 30px;
   line-height: 1.05;
 }
@@ -1510,8 +1546,8 @@ button:disabled {
 }
 
 .finance-readout-grid p {
-  background: #f7f9f5;
-  border-radius: 8px;
+  background: #fafaf7;
+  border-radius: 14px;
   margin: 0;
   padding: 12px;
 }
@@ -1554,8 +1590,8 @@ button:disabled {
 .column-pair,
 .single-column {
   align-items: flex-end;
-  background: #f1f5f2;
-  border-radius: 8px;
+  background: #f5f4f0;
+  border-radius: 16px;
   display: flex;
   gap: 7px;
   height: 170px;
@@ -1573,7 +1609,7 @@ button:disabled {
 }
 
 .column-forecast {
-  background: #9caf9e;
+  background: #f2bf8f;
 }
 
 .column-actual,
@@ -1678,9 +1714,9 @@ button:disabled {
 }
 
 .finance-meter {
-  background: #f7f9f5;
-  border: 1px solid rgba(23, 32, 51, 0.07);
-  border-radius: 8px;
+  background: #fafaf7;
+  border: 1px solid #f0ece6;
+  border-radius: 16px;
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -1717,6 +1753,74 @@ button:disabled {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+
+.risk-flag-list {
+  display: grid;
+  gap: 10px;
+}
+
+.risk-flag {
+  border: 1px solid #f0ece6;
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  text-decoration: none;
+}
+
+.risk-flag strong {
+  color: #1a1814;
+}
+
+.risk-flag span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.risk-info {
+  background: #eef4fc;
+}
+
+.risk-warning {
+  background: #fff9eb;
+  border-color: rgba(229, 161, 14, 0.3);
+}
+
+.risk-error {
+  background: #fff0ea;
+  border-color: rgba(232, 93, 44, 0.28);
+}
+
+.journal-filter-bar {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto 1fr auto;
+  margin-bottom: 14px;
+}
+
+.journal-filter-bar div {
+  background: #f5f4f0;
+  border-radius: 14px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.journal-filter-bar a {
+  border-radius: 10px;
+  color: #6b6560;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+
+.journal-filter-bar a.is-active {
+  background: #ffffff;
+  color: #e85d2c;
+  box-shadow: var(--shadow-soft);
 }
 
 .transaction-row {
@@ -2024,7 +2128,8 @@ pre {
   }
 
   .finance-hero-row,
-  .finance-tax-card {
+  .finance-tax-card,
+  .journal-filter-bar {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
