@@ -30,7 +30,20 @@ export const markInvoicePaidSchema = z.object({
   paymentMethod: z.string().trim().optional()
 })
 
+export const invoiceTemplateSchema = z.object({
+  organizationId: z.string().uuid(),
+  companyName: z.string().trim().min(1),
+  companyAddress: z.string().trim().optional(),
+  companyEmail: z.string().trim().email().optional().or(z.literal('')),
+  companyPhone: z.string().trim().optional(),
+  taxId: z.string().trim().optional(),
+  paymentInstructions: z.string().trim().optional(),
+  defaultNotes: z.string().trim().optional(),
+  logoDataUrl: z.string().trim().max(20480, 'Logo must be under 20KB').optional()
+})
+
 export type InvoiceItemInput = z.infer<typeof invoiceItemInputSchema>
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>
 export type UpdateInvoiceStatusInput = z.infer<typeof updateInvoiceStatusSchema>
 export type MarkInvoicePaidInput = z.infer<typeof markInvoicePaidSchema>
+export type InvoiceTemplateInput = z.infer<typeof invoiceTemplateSchema>

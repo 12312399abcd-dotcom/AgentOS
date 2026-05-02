@@ -1,4 +1,10 @@
-import { createInvoiceFromForm, exportInvoicePdfFromForm, markInvoicePaidFromForm, updateInvoiceStatusFromForm } from '@/lib/actions/invoices'
+import {
+  createInvoiceFromForm,
+  exportInvoicePdfFromForm,
+  markInvoicePaidFromForm,
+  updateInvoiceStatusFromForm,
+  updateInvoiceTemplateFromForm
+} from '@/lib/actions/invoices'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createSignedFileUrl } from '@/lib/services/storage'
 import { createClient } from '@/lib/supabase/server'
@@ -27,15 +33,21 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
   if (filters.dueStart) invoicesQuery = invoicesQuery.gte('due_date', filters.dueStart)
   if (filters.dueEnd) invoicesQuery = invoicesQuery.lte('due_date', filters.dueEnd)
 
-  const [{ data: clients }, { data: accounts }, { data: invoices }] = await Promise.all([
+  const [{ data: clients }, { data: accounts }, { data: invoices }, { data: template }] = await Promise.all([
     supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
     supabase.from('business_accounts').select('id, account_name').eq('organization_id', organization.id).eq('status', 'active').order('account_name'),
-    invoicesQuery
+    invoicesQuery,
+    supabase
+      .from('invoice_templates')
+      .select('company_name, company_address, company_email, company_phone, tax_id, payment_instructions, default_notes, logo_data_url')
+      .eq('organization_id', organization.id)
+      .maybeSingle()
   ])
   const createAction = createInvoiceFromForm.bind(null, organization.id, orgSlug)
   const statusAction = updateInvoiceStatusFromForm.bind(null, organization.id, orgSlug)
   const paidAction = markInvoicePaidFromForm.bind(null, organization.id, orgSlug)
   const exportAction = exportInvoicePdfFromForm.bind(null, organization.id, orgSlug)
+  const templateAction = updateInvoiceTemplateFromForm.bind(null, organization.id, orgSlug)
   const unpaid = (invoices ?? []).filter((invoice) => ['draft', 'sent', 'partial_paid', 'overdue'].includes(invoice.status))
   const accountsReceivable = unpaid.filter((invoice) => invoice.status !== 'draft').reduce((sum, invoice) => sum + Number(invoice.total_amount), 0)
   const exportParams = new URLSearchParams({ orgSlug })
@@ -46,7 +58,7 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
 
   return (
     <main className="shell">
-      <h1>Invoices</h1>
+      <h1>Quotes / Invoices</h1>
       <div className="actions">
         <a href={`/api/exports/invoices?${exportParams.toString()}`}>Export CSV</a>
       </div>
@@ -54,6 +66,21 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
         <div className="card"><strong>Unpaid Invoices</strong><p>{unpaid.length}</p></div>
         <div className="card"><strong>Accounts Receivable</strong><p>{accountsReceivable.toLocaleString()}</p></div>
       </div>
+      <section className="card">
+        <h2>Invoice template setup</h2>
+        <p className="muted">Set company details once. New PDF quotes and invoices will use this information. Logo must be a small data URL under 20KB.</p>
+        <form className="form form-wide" action={templateAction}>
+          <label>Company name<input name="companyName" required defaultValue={template?.company_name ?? organization.name} /></label>
+          <label>Company email<input name="companyEmail" type="email" defaultValue={template?.company_email ?? ''} /></label>
+          <label>Company phone<input name="companyPhone" defaultValue={template?.company_phone ?? ''} /></label>
+          <label>Tax ID<input name="taxId" defaultValue={template?.tax_id ?? ''} /></label>
+          <label className="form-span-2">Company address<textarea name="companyAddress" rows={2} defaultValue={template?.company_address ?? ''} /></label>
+          <label className="form-span-2">Payment instructions<textarea name="paymentInstructions" rows={3} defaultValue={template?.payment_instructions ?? ''} /></label>
+          <label className="form-span-2">Default notes<textarea name="defaultNotes" rows={3} defaultValue={template?.default_notes ?? ''} /></label>
+          <label className="form-span-2">Logo data URL under 20KB<textarea name="logoDataUrl" rows={3} maxLength={20480} defaultValue={template?.logo_data_url ?? ''} /></label>
+          <button type="submit">Save template</button>
+        </form>
+      </section>
       <section>
         <h2>Filters</h2>
         <form className="filter-bar">
@@ -78,7 +105,7 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
         </form>
       </section>
       <section className="card">
-        <h2>Create invoice</h2>
+        <h2>Create quote / invoice</h2>
         <form className="form" action={createAction}>
           <label>
             Client
@@ -100,7 +127,7 @@ export default async function FinanceInvoicesPage({ params, searchParams }: Fina
               <label>Unit price<input name={`itemUnitPrice${index}`} type="number" min="0" step="0.01" defaultValue="0" /></label>
             </div>
           ))}
-          <button type="submit">Create invoice</button>
+          <button type="submit">Create draft</button>
         </form>
       </section>
       <section>

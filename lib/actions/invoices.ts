@@ -8,9 +8,11 @@ import { createSimplePdf } from '@/lib/services/pdf'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   createInvoiceSchema,
+  invoiceTemplateSchema,
   markInvoicePaidSchema,
   updateInvoiceStatusSchema,
   type CreateInvoiceInput,
+  type InvoiceTemplateInput,
   type InvoiceItemInput,
   type MarkInvoicePaidInput,
   type UpdateInvoiceStatusInput
@@ -210,21 +212,79 @@ export async function markInvoicePaid(input: MarkInvoicePaidInput) {
   })
 }
 
+export async function updateInvoiceTemplate(input: InvoiceTemplateInput) {
+  const parsed = invoiceTemplateSchema.parse(input)
+  const member = await requireWorkspaceAccess(parsed.organizationId, 'finance')
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
+    .from('invoice_templates')
+    .upsert({
+      organization_id: parsed.organizationId,
+      company_name: parsed.companyName,
+      company_address: parsed.companyAddress,
+      company_email: parsed.companyEmail || null,
+      company_phone: parsed.companyPhone,
+      tax_id: parsed.taxId,
+      payment_instructions: parsed.paymentInstructions,
+      default_notes: parsed.defaultNotes,
+      logo_data_url: parsed.logoDataUrl,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'organization_id' })
+    .select('id')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  await admin.from('audit_logs').insert({
+    organization_id: parsed.organizationId,
+    actor_id: member.user_id,
+    entity_type: 'invoice_template',
+    entity_id: data.id,
+    action: 'updated',
+    new_data: {
+      company_name: parsed.companyName,
+      company_email: parsed.companyEmail,
+      has_logo: Boolean(parsed.logoDataUrl)
+    }
+  })
+}
+
 export async function exportInvoicePdf(organizationId: string, invoiceId: string) {
   const member = await requireWorkspaceAccess(organizationId, 'finance')
   const admin = createAdminClient()
-  const { data: invoice, error } = await admin
-    .from('invoices')
-    .select('id, invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, clients(name, contact_email), invoice_items(description, quantity, unit_price, line_total)')
-    .eq('organization_id', organizationId)
-    .eq('id', invoiceId)
-    .single()
+  const [{ data: invoice, error }, { data: template }, { data: organization }] = await Promise.all([
+    admin
+      .from('invoices')
+      .select('id, invoice_number, service_period_start, service_period_end, subtotal, tax_rate, tax_amount, total_amount, status, due_date, clients(name, contact_email), invoice_items(description, quantity, unit_price, line_total)')
+      .eq('organization_id', organizationId)
+      .eq('id', invoiceId)
+      .single(),
+    admin
+      .from('invoice_templates')
+      .select('company_name, company_address, company_email, company_phone, tax_id, payment_instructions, default_notes, logo_data_url')
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
+    admin
+      .from('organizations')
+      .select('name, currency')
+      .eq('id', organizationId)
+      .single()
+  ])
 
   if (error || !invoice) throw new Error('Invoice not found')
 
   const client = Array.isArray(invoice.clients) ? invoice.clients[0] : invoice.clients
+  const companyName = template?.company_name ?? organization?.name ?? 'Company'
+  const logoMarker = template?.logo_data_url ? '[Logo saved in invoice template]' : ''
   const lines = [
-    `Invoice ${invoice.invoice_number}`,
+    companyName,
+    template?.company_address ?? '',
+    [template?.company_email, template?.company_phone].filter(Boolean).join(' | '),
+    template?.tax_id ? `Tax ID: ${template.tax_id}` : '',
+    logoMarker,
+    '',
+    `QUOTE / INVOICE ${invoice.invoice_number}`,
     `Client: ${client?.name ?? 'Client'}`,
     `Email: ${client?.contact_email ?? ''}`,
     `Status: ${invoice.status}`,
@@ -237,8 +297,11 @@ export async function exportInvoicePdf(organizationId: string, invoiceId: string
     `Subtotal: ${invoice.subtotal}`,
     `Tax rate: ${invoice.tax_rate}%`,
     `Tax amount: ${invoice.tax_amount}`,
-    `Total: ${invoice.total_amount}`
-  ]
+    `Total: ${invoice.total_amount} ${organization?.currency ?? ''}`,
+    '',
+    template?.payment_instructions ? `Payment: ${template.payment_instructions}` : '',
+    template?.default_notes ? `Notes: ${template.default_notes}` : ''
+  ].filter((line) => line !== '')
   const pdf = createSimplePdf(lines)
   const path = `${organizationId}/invoices/${invoice.id}.pdf`
   const { error: uploadError } = await admin.storage.from('invoices').upload(path, pdf, {
@@ -304,5 +367,21 @@ export async function markInvoicePaidFromForm(organizationId: string, orgSlug: s
 
 export async function exportInvoicePdfFromForm(organizationId: string, orgSlug: string, formData: FormData) {
   await exportInvoicePdf(organizationId, String(formData.get('invoiceId') ?? ''))
+  revalidatePath(`/org/${orgSlug}/finance/invoices`)
+}
+
+export async function updateInvoiceTemplateFromForm(organizationId: string, orgSlug: string, formData: FormData) {
+  await updateInvoiceTemplate({
+    organizationId,
+    companyName: String(formData.get('companyName') ?? ''),
+    companyAddress: readOptionalString(formData, 'companyAddress'),
+    companyEmail: readOptionalString(formData, 'companyEmail'),
+    companyPhone: readOptionalString(formData, 'companyPhone'),
+    taxId: readOptionalString(formData, 'taxId'),
+    paymentInstructions: readOptionalString(formData, 'paymentInstructions'),
+    defaultNotes: readOptionalString(formData, 'defaultNotes'),
+    logoDataUrl: readOptionalString(formData, 'logoDataUrl')
+  })
+
   revalidatePath(`/org/${orgSlug}/finance/invoices`)
 }

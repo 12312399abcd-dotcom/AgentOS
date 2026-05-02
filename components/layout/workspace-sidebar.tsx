@@ -16,18 +16,12 @@ const operationLinks = [
 ]
 
 const financeLinks = [
-  ['Dashboard', 'dashboard'],
+  ['Overview', 'dashboard'],
   ['Journal', 'journal'],
-  ['Forecast Budget', 'forecast-budget'],
-  ['Cashflow', 'cashflow'],
-  ['Income Statement', 'income-statement'],
-  ['Balance Sheet', 'balance-sheet'],
-  ['Business Expenses', 'business-expenses'],
-  ['Payroll', 'payroll'],
+  ['Budget', 'forecast-budget'],
   ['Invoices', 'invoices'],
-  ['Tax', 'tax'],
-  ['Capital / Loans', 'capital-loans'],
-  ['Period Close', 'period-close']
+  ['Cashflow', 'cashflow'],
+  ['Reports', 'income-statement']
 ]
 
 const settingsLinks = [
