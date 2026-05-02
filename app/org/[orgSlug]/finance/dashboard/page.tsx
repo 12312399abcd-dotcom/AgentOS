@@ -5,6 +5,42 @@ type FinanceDashboardProps = {
   params: Promise<{ orgSlug: string }>
 }
 
+const chartColors = ['#2f6b4f', '#6f8f72', '#d49a3a', '#7b8ea3', '#a65f4d', '#4c6a92']
+
+function addByCategory(rows: { category: string; amount: number | string }[]) {
+  return rows.reduce<Record<string, number>>((acc, item) => {
+    acc[item.category] = (acc[item.category] ?? 0) + Number(item.amount)
+    return acc
+  }, {})
+}
+
+function topCategorySlices(categoryTotals: Record<string, number>, total: number) {
+  return Object.entries(categoryTotals)
+    .sort(([, first], [, second]) => second - first)
+    .slice(0, 6)
+    .map(([label, value], index) => ({
+      label: label.replaceAll('_', ' '),
+      value,
+      color: chartColors[index % chartColors.length],
+      percent: total > 0 ? (value / total) * 100 : 0
+    }))
+}
+
+function conicGradient(slices: { color: string; percent: number }[]) {
+  if (slices.length === 0 || slices.every((slice) => slice.percent === 0)) {
+    return '#eef3f0'
+  }
+
+  let cursor = 0
+  return slices
+    .map((slice) => {
+      const start = cursor
+      cursor += slice.percent
+      return `${slice.color} ${start}% ${cursor}%`
+    })
+    .join(', ')
+}
+
 export default async function FinanceDashboard({ params }: FinanceDashboardProps) {
   const { orgSlug } = await params
   const organization = await getOrganizationBySlug(orgSlug)
@@ -111,6 +147,30 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
     { label: 'Spending allowance', value: Math.max(spendingAllowance, 0) }
   ]
   const safetyMax = Math.max(...safetySnapshot.map((item) => item.value), 1)
+  const monthlyMoneyInRows = allTransactions.filter((item) => item.direction === 'money_in' && item.transaction_date >= monthStart)
+  const monthlyMoneyOutRows = allTransactions.filter((item) => item.direction === 'money_out' && item.transaction_date >= monthStart)
+  const moneyInSlices = topCategorySlices(addByCategory(monthlyMoneyInRows), moneyIn)
+  const moneyOutSlices = topCategorySlices(addByCategory(monthlyMoneyOutRows), moneyOut)
+  const forecastActualColumns = [
+    { label: 'Money in', forecast: expectedMoneyIn, actual: moneyIn },
+    { label: 'Money out', forecast: expectedMoneyOut, actual: moneyOut },
+    { label: 'Net', forecast: Math.max(expectedMoneyIn - expectedMoneyOut, 0), actual: Math.max(moneyIn - moneyOut, 0) }
+  ]
+  const forecastColumnMax = Math.max(...forecastActualColumns.flatMap((item) => [item.forecast, item.actual]), 1)
+  const obligationColumns = [
+    { label: 'Payroll', value: payrollDue },
+    { label: 'Bills', value: fixedExpensesDue },
+    { label: 'Tax gap', value: Math.max(taxReserveNeeded - taxPaid, 0) },
+    { label: 'Reserve', value: minimumReserve }
+  ]
+  const obligationMax = Math.max(...obligationColumns.map((item) => item.value), 1)
+  const cashPositionColumns = [
+    { label: 'Cash', value: currentCash },
+    { label: 'Projected', value: projectedMonthEndCash },
+    { label: 'After payroll', value: projectedCashAfterPayroll },
+    { label: 'Allowance', value: Math.max(spendingAllowance, 0) }
+  ]
+  const cashPositionMax = Math.max(...cashPositionColumns.map((item) => item.value), 1)
 
   return (
     <main className="shell">
@@ -158,6 +218,82 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
                 <span>{item.label}</span>
                 <div><i style={{ width: `${Math.max((item.value / safetyMax) * 100, 4)}%` }} /></div>
                 <strong>{item.value.toLocaleString()}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+      <section className="finance-visual-grid">
+        <article className="card chart-panel">
+          <h2>Forecast vs Actual</h2>
+          <div className="column-chart">
+            {forecastActualColumns.map((item) => (
+              <div className="column-group" key={item.label}>
+                <div className="column-pair">
+                  <i className="column-forecast" style={{ height: `${Math.max((item.forecast / forecastColumnMax) * 100, 4)}%` }} />
+                  <i className="column-actual" style={{ height: `${Math.max((item.actual / forecastColumnMax) * 100, 4)}%` }} />
+                </div>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="chart-legend">
+            <span><i className="legend-forecast" /> Forecast</span>
+            <span><i className="legend-actual" /> Actual</span>
+          </div>
+        </article>
+        <article className="card chart-panel">
+          <h2>Money Out Mix</h2>
+          <div className="donut-chart-wrap">
+            <div className="donut-chart" style={{ background: `conic-gradient(${conicGradient(moneyOutSlices)})` }}>
+              <strong>{moneyOut.toLocaleString()}</strong>
+              <span>out</span>
+            </div>
+            <div className="donut-legend">
+              {moneyOutSlices.length > 0 ? moneyOutSlices.map((slice) => (
+                <span key={slice.label}><i style={{ background: slice.color }} />{slice.label} · {slice.percent.toFixed(0)}%</span>
+              )) : <span>No money out this month</span>}
+            </div>
+          </div>
+        </article>
+        <article className="card chart-panel">
+          <h2>Money In Mix</h2>
+          <div className="donut-chart-wrap">
+            <div className="donut-chart" style={{ background: `conic-gradient(${conicGradient(moneyInSlices)})` }}>
+              <strong>{moneyIn.toLocaleString()}</strong>
+              <span>in</span>
+            </div>
+            <div className="donut-legend">
+              {moneyInSlices.length > 0 ? moneyInSlices.map((slice) => (
+                <span key={slice.label}><i style={{ background: slice.color }} />{slice.label} · {slice.percent.toFixed(0)}%</span>
+              )) : <span>No money in this month</span>}
+            </div>
+          </div>
+        </article>
+        <article className="card chart-panel">
+          <h2>Protected Cash Allocation</h2>
+          <div className="column-chart column-chart-wide">
+            {obligationColumns.map((item) => (
+              <div className="column-group" key={item.label}>
+                <div className="single-column">
+                  <i style={{ height: `${Math.max((item.value / obligationMax) * 100, 4)}%` }} />
+                </div>
+                <span>{item.label}</span>
+                <strong>{item.value.toLocaleString()}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="card chart-panel finance-visual-wide">
+          <h2>Cash Position</h2>
+          <div className="finance-meter-grid">
+            {cashPositionColumns.map((item) => (
+              <div className="finance-meter" key={item.label}>
+                <div>
+                  <span>{item.label}</span>
+                  <strong>{item.value.toLocaleString()}</strong>
+                </div>
+                <i style={{ width: `${Math.max((item.value / cashPositionMax) * 100, 4)}%` }} />
               </div>
             ))}
           </div>
