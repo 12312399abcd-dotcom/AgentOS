@@ -1,3 +1,4 @@
+import { updateOrganizationMemberFromForm } from '@/lib/actions/organizations'
 import { getOrganizationBySlug, requireWorkspaceAccess } from '@/lib/services/permissions'
 import { createClient } from '@/lib/supabase/server'
 
@@ -11,7 +12,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
 
   if (!organization) return null
 
-  await requireWorkspaceAccess(organization.id, 'operation')
+  const currentMember = await requireWorkspaceAccess(organization.id, 'operation')
   const supabase = await createClient()
   const { data: members } = await supabase
     .from('organization_members')
@@ -24,6 +25,8 @@ export default async function TeamPage({ params }: TeamPageProps) {
     acc[member.role] = (acc[member.role] ?? 0) + 1
     return acc
   }, {})
+  const canManageRoles = currentMember.role === 'admin'
+  const updateMemberAction = updateOrganizationMemberFromForm.bind(null, organization.id, orgSlug)
 
   return (
     <main className="shell">
@@ -55,6 +58,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Status</th>
+                {canManageRoles ? <th>Access</th> : null}
                 <th>Daily Limit</th>
                 <th>Weekly Limit</th>
               </tr>
@@ -69,6 +73,24 @@ export default async function TeamPage({ params }: TeamPageProps) {
                     <td>{profile?.email ?? ''}</td>
                     <td>{member.role.replaceAll('_', ' ')}</td>
                     <td>{member.status}</td>
+                    {canManageRoles ? (
+                      <td>
+                        <form className="inline-form compact-inline-form" action={updateMemberAction}>
+                          <input type="hidden" name="userId" value={member.user_id} />
+                          <input type="hidden" name="status" value={member.status} />
+                          <select name="role" defaultValue={member.role} aria-label="Member role">
+                            <option value="admin">Admin</option>
+                            <option value="finance_moderator">Finance moderator</option>
+                            <option value="designer">Designer</option>
+                            <option value="editor">Editor</option>
+                            <option value="marketing">Marketing</option>
+                            <option value="channel_manager">Channel manager</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                          <button type="submit">Save role</button>
+                        </form>
+                      </td>
+                    ) : null}
                     <td>{profile?.daily_time_limit_minutes ?? ''}</td>
                     <td>{profile?.weekly_time_limit_minutes ?? ''}</td>
                   </tr>

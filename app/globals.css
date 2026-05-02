@@ -1064,6 +1064,14 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.compact-inline-form {
+  flex-wrap: nowrap;
+}
+
+.compact-inline-form select {
+  min-width: 170px;
+}
+
 .checkbox-grid {
   display: grid;
   gap: 8px;

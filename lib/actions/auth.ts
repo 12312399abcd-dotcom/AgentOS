@@ -18,16 +18,36 @@ function requiredString(formData: FormData, key: string) {
   return value.trim()
 }
 
+function loginRedirectWithError(message: string, next: FormDataEntryValue | null, inviteToken: FormDataEntryValue | null): never {
+  const params = new URLSearchParams({ error: message })
+
+  if (typeof next === 'string' && next.startsWith('/')) {
+    params.set('next', next)
+  }
+
+  if (typeof inviteToken === 'string' && inviteToken) {
+    params.set('inviteToken', inviteToken)
+  }
+
+  redirect(`/login?${params.toString()}`)
+}
+
 export async function signInWithPassword(formData: FormData) {
   const email = requiredString(formData, 'email').toLowerCase()
   const password = requiredString(formData, 'password')
   const next = formData.get('next')
   const inviteToken = formData.get('inviteToken')
-  const supabase = await createClient()
+  let supabase: Awaited<ReturnType<typeof createClient>>
+
+  try {
+    supabase = await createClient()
+  } catch {
+    loginRedirectWithError('Login is not configured yet. Check Supabase environment variables on Vercel.', next, inviteToken)
+  }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) {
-    throw new Error(error.message)
+    loginRedirectWithError(error.message, next, inviteToken)
   }
 
   if (typeof inviteToken === 'string' && inviteToken) {

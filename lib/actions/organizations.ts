@@ -456,6 +456,7 @@ export async function updateOrganizationMemberFromForm(organizationId: string, o
   })
 
   revalidatePath(`/org/${orgSlug}/settings/members`)
+  revalidatePath(`/org/${orgSlug}/operation/team`)
 }
 
 export async function getInvitationPreview(token: string) {

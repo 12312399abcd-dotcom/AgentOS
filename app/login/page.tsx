@@ -1,7 +1,7 @@
 import { signInWithPassword } from '@/lib/actions/auth'
 
 type LoginPageProps = {
-  searchParams: Promise<{ next?: string; inviteToken?: string; checkEmail?: string }>
+  searchParams: Promise<{ next?: string; inviteToken?: string; checkEmail?: string; error?: string }>
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -41,6 +41,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           {params.checkEmail ? (
             <p className="notice">Check your email to confirm your account, then log in.</p>
+          ) : null}
+
+          {params.error ? (
+            <p className="notice notice-danger">{params.error}</p>
           ) : null}
 
           {params.inviteToken ? (
