@@ -1,9 +1,16 @@
 import { createOrganizationFromForm } from '@/lib/actions/organizations'
 
-export default function CreateOrganizationPage() {
+type CreateOrganizationPageProps = {
+  searchParams: Promise<{ error?: string }>
+}
+
+export default async function CreateOrganizationPage({ searchParams }: CreateOrganizationPageProps) {
+  const params = await searchParams
+
   return (
     <main className="shell">
       <h1>Create Organization</h1>
+      {params.error ? <p className="notice notice-danger">{params.error}</p> : null}
       <form className="form" action={createOrganizationFromForm}>
         <label>
           Organization name

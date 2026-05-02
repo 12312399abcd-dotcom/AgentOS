@@ -3,6 +3,7 @@
 import { randomBytes } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { z } from 'zod'
 
 import { requireAdmin, requireUser } from '@/lib/services/permissions'
 import { writeAuditLog } from '@/lib/services/audit'
@@ -62,57 +63,72 @@ export async function createOrganization(input: CreateOrganizationInput) {
     throw new Error(orgError.message)
   }
 
-  const inserts = [
-    admin.from('organization_members').insert({
-      organization_id: organization.id,
-      user_id: user.id,
-      role: 'admin',
-      status: 'active'
-    }),
-    admin.from('organization_workspaces').insert([
-      { organization_id: organization.id, workspace_type: 'operation' },
-      { organization_id: organization.id, workspace_type: 'finance' }
-    ]),
-    admin.from('finance_control_settings').insert({
-      organization_id: organization.id,
-      payroll_cycle: parsed.payrollCycle,
-      financial_period: parsed.financialPeriod
-    }),
-    admin.from('business_accounts').insert({
-      organization_id: organization.id,
-      account_name: 'Main Business Account',
-      account_type: 'bank',
-      currency: parsed.currency
-    }),
-    admin.from('audit_logs').insert({
-      organization_id: organization.id,
-      actor_id: user.id,
-      entity_type: 'organization',
-      entity_id: organization.id,
-      action: 'created',
-      new_data: parsed
-    })
-  ]
+  try {
+    const setupSteps = [
+      admin.from('organization_members').insert({
+        organization_id: organization.id,
+        user_id: user.id,
+        role: 'admin',
+        status: 'active'
+      }),
+      admin.from('organization_workspaces').insert([
+        { organization_id: organization.id, workspace_type: 'operation' },
+        { organization_id: organization.id, workspace_type: 'finance' }
+      ]),
+      admin.from('finance_control_settings').insert({
+        organization_id: organization.id,
+        payroll_cycle: parsed.payrollCycle,
+        financial_period: parsed.financialPeriod
+      }),
+      admin.from('business_accounts').insert({
+        organization_id: organization.id,
+        account_name: 'Main Business Account',
+        account_type: 'bank',
+        currency: parsed.currency
+      }),
+      admin.from('audit_logs').insert({
+        organization_id: organization.id,
+        actor_id: user.id,
+        entity_type: 'organization',
+        entity_id: organization.id,
+        action: 'created',
+        new_data: parsed
+      })
+    ]
 
-  const results = await Promise.all(inserts)
-  const failed = results.find((result) => result.error)
-  if (failed?.error) {
-    throw new Error(failed.error.message)
+    for (const step of setupSteps) {
+      const { error } = await step
+      if (error) throw new Error(error.message)
+    }
+  } catch (error) {
+    await admin.from('organizations').delete().eq('id', organization.id)
+    throw error
   }
+
+  await startMemberSession(organization.id, user.id)
 
   redirect(`/org/${organization.slug}/workspace`)
 }
 
 export async function createOrganizationFromForm(formData: FormData) {
-  await createOrganization({
-    name: readString(formData, 'name'),
-    slug: readString(formData, 'slug'),
-    timezone: readString(formData, 'timezone'),
-    currency: readString(formData, 'currency'),
-    businessType: readString(formData, 'businessType') as CreateOrganizationInput['businessType'],
-    payrollCycle: readString(formData, 'payrollCycle') as CreateOrganizationInput['payrollCycle'],
-    financialPeriod: 'monthly'
-  })
+  try {
+    await createOrganization({
+      name: readString(formData, 'name'),
+      slug: readString(formData, 'slug'),
+      timezone: readString(formData, 'timezone'),
+      currency: readString(formData, 'currency').toUpperCase(),
+      businessType: readString(formData, 'businessType') as CreateOrganizationInput['businessType'],
+      payrollCycle: readString(formData, 'payrollCycle') as CreateOrganizationInput['payrollCycle'],
+      financialPeriod: 'monthly'
+    })
+  } catch (error) {
+    const message = error instanceof z.ZodError
+      ? error.issues.map((issue) => issue.message).join(', ')
+      : error instanceof Error
+        ? error.message
+        : 'Could not create organization'
+    redirect(`/onboarding/create-organization?error=${encodeURIComponent(message)}`)
+  }
 }
 
 export async function inviteOrganizationMember(input: InviteMemberInput) {

@@ -184,6 +184,12 @@ summary:focus-visible {
   padding: 12px 14px;
 }
 
+.notice-danger {
+  background: #fef3f2;
+  border-color: #fecdca;
+  color: var(--danger);
+}
+
 .auth-page {
   background:
     radial-gradient(circle at 0% 0%, rgba(23, 107, 77, 0.05) 0%, transparent 50%),
