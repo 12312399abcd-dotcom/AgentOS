@@ -11,6 +11,10 @@ type JournalPageProps = {
   params: Promise<{ orgSlug: string }>
 }
 
+function money(value: number) {
+  return value.toLocaleString()
+}
+
 export default async function JournalPage({ params }: JournalPageProps) {
   const { orgSlug } = await params
   const organization = await getOrganizationBySlug(orgSlug)
@@ -41,30 +45,35 @@ export default async function JournalPage({ params }: JournalPageProps) {
   const paidAction = markBusinessExpensePaidFromForm.bind(null, organization.id, orgSlug)
 
   return (
-    <main className="shell">
-      <h1>Finance Journal</h1>
-      <p className="muted">Enter money events here once. Cashflow, dashboard, expense tracking, statements, and period close calculate from these records.</p>
+    <main className="shell finance-hkd">
+      <div className="finance-hero-row">
+        <div>
+          <p className="auth-eyebrow">Sổ thu chi</p>
+          <h1>Ghi khoản mới</h1>
+          <p className="muted">Nhập thu hoặc chi một lần. Dashboard, dòng tiền, báo cáo và công nợ sẽ tự tính.</p>
+        </div>
+      </div>
       <section className="journal-grid">
         <article className="card">
-          <h2>Add expense</h2>
+          <h2>↙ Ghi chi phí</h2>
           <form className="form" action={addExpenseAction}>
-            <label>Expense date<input name="expenseDate" type="date" required /></label>
-            <label>Due date<input name="dueDate" type="date" /></label>
-            <label>Paid date<input name="paidDate" type="date" /></label>
+            <label>Ngày phát sinh<input name="expenseDate" type="date" required /></label>
+            <label>Ngày đến hạn<input name="dueDate" type="date" /></label>
+            <label>Ngày đã trả<input name="paidDate" type="date" /></label>
             <label>
-              Category
+              Danh mục
               <select name="category" required defaultValue="software_subscription">
                 {expenseCategories.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </label>
-            <label>Vendor<input name="vendorName" /></label>
-            <label>Description<textarea name="description" rows={3} /></label>
-            <label>Amount<input name="amount" type="number" min="0" step="0.01" required /></label>
-            <label>Tax<input name="taxAmount" type="number" min="0" step="0.01" defaultValue="0" /></label>
+            <label>Nhà cung cấp<input name="vendorName" /></label>
+            <label>Nội dung<textarea name="description" rows={3} /></label>
+            <label>Số tiền<input name="amount" type="number" min="0" step="0.01" required /></label>
+            <label>Thuế<input name="taxAmount" type="number" min="0" step="0.01" defaultValue="0" /></label>
             <label>
-              Status
+              Trạng thái
               <select name="status" defaultValue="unpaid">
                 <option value="unpaid">Unpaid</option>
                 <option value="scheduled">Scheduled</option>
@@ -90,23 +99,23 @@ export default async function JournalPage({ params }: JournalPageProps) {
               </select>
             </label>
             <label>Payment method<input name="paymentMethod" /></label>
-            <button type="submit">Save journal expense</button>
+            <button type="submit">Lưu khoản chi</button>
           </form>
         </article>
         <article className="card">
-          <h2>Add money in</h2>
+          <h2>↗ Ghi thu nhập</h2>
           <form className="form" action={addIncomeAction}>
             <input type="hidden" name="direction" value="money_in" />
-            <label>Transaction date<input name="transactionDate" type="date" required /></label>
+            <label>Ngày nhận tiền<input name="transactionDate" type="date" required /></label>
             <label>
-              Category
+              Danh mục
               <select name="category" required defaultValue="client_retainer">
                 {incomeCategories.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </label>
-            <label>Amount<input name="amount" type="number" min="0" step="0.01" required /></label>
+            <label>Số tiền<input name="amount" type="number" min="0" step="0.01" required /></label>
             <label>
               Business account
               <select name="businessAccountId" defaultValue="">
@@ -125,10 +134,10 @@ export default async function JournalPage({ params }: JournalPageProps) {
                 ))}
               </select>
             </label>
-            <label>Source<input name="vendorName" /></label>
-            <label>Payment method<input name="paymentMethod" /></label>
-            <label>Notes<textarea name="notes" rows={3} /></label>
-            <button type="submit">Save journal income</button>
+            <label>Nguồn tiền<input name="vendorName" /></label>
+            <label>Phương thức<input name="paymentMethod" /></label>
+            <label>Ghi chú<textarea name="notes" rows={3} /></label>
+            <button type="submit">Lưu khoản thu</button>
           </form>
         </article>
       </section>
@@ -173,14 +182,20 @@ export default async function JournalPage({ params }: JournalPageProps) {
         </div>
       </section>
       <section>
-        <h2>Recent journal impact</h2>
-        <div className="grid">
+        <h2>Giao dịch gần đây</h2>
+        <div className="transaction-feed">
           {(recentTransactions ?? []).map((transaction) => (
-            <article className="card" key={transaction.id}>
-              <strong>{transaction.category}</strong>
-              <p>{transaction.transaction_date} · {transaction.direction}</p>
-              <p>{Number(transaction.amount).toLocaleString()}</p>
-              <p className="muted">{transaction.vendor_name ?? transaction.payee_name ?? 'Company-level'}</p>
+            <article className="transaction-row" key={transaction.id}>
+              <div className={transaction.direction === 'money_in' ? 'transaction-icon is-income' : 'transaction-icon is-expense'}>
+                {transaction.direction === 'money_in' ? '↗' : '↙'}
+              </div>
+              <div>
+                <strong>{transaction.category.replaceAll('_', ' ')}</strong>
+                <p>{transaction.transaction_date} · {transaction.vendor_name ?? transaction.payee_name ?? 'Company-level'}</p>
+              </div>
+              <span className={transaction.direction === 'money_in' ? 'is-income-text' : 'is-expense-text'}>
+                {transaction.direction === 'money_in' ? '+' : '-'}{money(Number(transaction.amount))}
+              </span>
             </article>
           ))}
         </div>

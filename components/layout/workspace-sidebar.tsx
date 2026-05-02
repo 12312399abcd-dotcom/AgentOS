@@ -16,12 +16,12 @@ const operationLinks = [
 ]
 
 const financeLinks = [
-  ['Overview', 'dashboard'],
-  ['Journal', 'journal'],
-  ['Budget', 'forecast-budget'],
-  ['Invoices', 'invoices'],
-  ['Cashflow', 'cashflow'],
-  ['Reports', 'income-statement']
+  ['Tổng quan', 'dashboard'],
+  ['Sổ thu chi', 'journal'],
+  ['Ngân sách', 'forecast-budget'],
+  ['Báo giá / Hóa đơn', 'invoices'],
+  ['Dòng tiền', 'cashflow'],
+  ['Báo cáo', 'income-statement']
 ]
 
 const settingsLinks = [

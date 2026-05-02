@@ -7,6 +7,10 @@ type FinanceDashboardProps = {
 
 const chartColors = ['#2f6b4f', '#6f8f72', '#d49a3a', '#7b8ea3', '#a65f4d', '#4c6a92']
 
+function money(value: number) {
+  return value.toLocaleString()
+}
+
 function addByCategory(rows: { category: string; amount: number | string }[]) {
   return rows.reduce<Record<string, number>>((acc, item) => {
     acc[item.category] = (acc[item.category] ?? 0) + Number(item.amount)
@@ -190,48 +194,66 @@ export default async function FinanceDashboard({ params }: FinanceDashboardProps
   const budgetIncrease = expectedMoneyOut > 0 ? ((moneyOut - expectedMoneyOut) / expectedMoneyOut) * 100 : 0
   const financeStatus =
     cashRisk === 'critical'
-      ? 'Cash is critical'
+      ? 'Dòng tiền đang rất căng'
       : cashRisk === 'high'
-        ? 'Cash needs attention'
+        ? 'Dòng tiền cần chú ý'
         : profitNow < 0
-          ? 'Profit is negative this month'
+          ? 'Tháng này đang lỗ'
           : accountsReceivable > accountsPayable
-            ? 'Receivables can cover bills'
-            : 'Cash is stable'
+            ? 'Công nợ khách hàng có thể bù hóa đơn cần trả'
+            : 'Dòng tiền đang ổn'
 
   return (
-    <main className="shell">
-      <h1>Finance Overview</h1>
+    <main className="shell finance-hkd">
+      <div className="finance-hero-row">
+        <div>
+          <p className="auth-eyebrow">Finance OS</p>
+          <h1>Tổng quan</h1>
+          <p className="muted">Tháng {currentMonth} · {organization.name}</p>
+        </div>
+        <a className="finance-primary-action" href={`/org/${orgSlug}/finance/journal`}>+ Ghi khoản mới</a>
+      </div>
+      <section className={`finance-tax-card ${cashRisk === 'normal' ? 'is-safe' : 'is-risk'}`}>
+        <div className="finance-tax-icon">{cashRisk === 'normal' ? '✓' : '!'}</div>
+        <div>
+          <strong>{financeStatus}</strong>
+          <p>{cashGap >= 0 ? `Dự kiến còn cao hơn mức an toàn ${money(cashGap)}.` : `Dự kiến thiếu ${money(Math.abs(cashGap))} so với mức an toàn.`}</p>
+        </div>
+        <div>
+          <span>Safe to spend</span>
+          <strong>{money(spendingAllowance)}</strong>
+        </div>
+      </section>
       <section className="finance-question-grid">
         <article className="card finance-question-card">
-          <span>Cash right now</span>
-          <strong>{currentCash.toLocaleString()}</strong>
-          <p>{cashGap >= 0 ? `${cashGap.toLocaleString()} above reserve` : `${Math.abs(cashGap).toLocaleString()} below reserve`}</p>
+          <span>Tiền hiện có</span>
+          <strong>{money(currentCash)}</strong>
+          <p>{cashGap >= 0 ? `${money(cashGap)} trên mức an toàn` : `${money(Math.abs(cashGap))} dưới mức an toàn`}</p>
         </article>
         <article className="card finance-question-card">
-          <span>Profit this month</span>
-          <strong>{profitNow.toLocaleString()}</strong>
-          <p>{moneyIn.toLocaleString()} in · {moneyOut.toLocaleString()} out</p>
+          <span>Lợi nhuận tháng này</span>
+          <strong>{money(profitNow)}</strong>
+          <p>{money(moneyIn)} thu · {money(moneyOut)} chi</p>
         </article>
         <article className="card finance-question-card">
-          <span>Money owed to you</span>
-          <strong>{accountsReceivable.toLocaleString()}</strong>
-          <p>{overdueReceivables.length} overdue invoice(s)</p>
+          <span>Khách còn nợ</span>
+          <strong>{money(accountsReceivable)}</strong>
+          <p>{overdueReceivables.length} hóa đơn quá hạn</p>
         </article>
         <article className="card finance-question-card">
-          <span>Bills you owe</span>
-          <strong>{accountsPayable.toLocaleString()}</strong>
-          <p>{overdueExpenses.length} overdue · {upcomingBills.length} due soon</p>
+          <span>Khoản cần trả</span>
+          <strong>{money(accountsPayable)}</strong>
+          <p>{overdueExpenses.length} quá hạn · {upcomingBills.length} sắp đến hạn</p>
         </article>
         <article className="card finance-question-card">
-          <span>Future cash</span>
-          <strong>{projectedMonthEndCash.toLocaleString()}</strong>
-          <p>{expectedRemainingIn.toLocaleString()} expected in · {expectedRemainingOut.toLocaleString()} expected out</p>
+          <span>Tiền cuối tháng dự kiến</span>
+          <strong>{money(projectedMonthEndCash)}</strong>
+          <p>{money(expectedRemainingIn)} sẽ thu · {money(expectedRemainingOut)} sẽ chi</p>
         </article>
         <article className="card finance-question-card">
-          <span>Monthly budget change</span>
+          <span>Chi vượt ngân sách</span>
           <strong>{budgetIncrease.toFixed(0)}%</strong>
-          <p>{forecast ? `${forecast.forecast_month} forecast` : 'No active forecast yet'}</p>
+          <p>{forecast ? `Theo ngân sách ${forecast.forecast_month}` : 'Chưa có ngân sách active'}</p>
         </article>
       </section>
       <section className="card finance-readout">
