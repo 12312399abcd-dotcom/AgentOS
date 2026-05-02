@@ -20,6 +20,11 @@ function monthBounds(period: string) {
   }
 }
 
+function previousMonth(period: string) {
+  const [year, month] = period.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7)
+}
+
 export default async function ForecastBudgetPage({ params, searchParams }: ForecastBudgetPageProps) {
   const { orgSlug } = await params
   const filters = await searchParams
@@ -37,9 +42,18 @@ export default async function ForecastBudgetPage({ params, searchParams }: Forec
   if (filters.forecastMonth) budgetsQuery = budgetsQuery.eq('forecast_month', filters.forecastMonth)
   if (filters.status) budgetsQuery = budgetsQuery.eq('status', filters.status)
 
-  const [{ data: budgets }, { data: clients }] = await Promise.all([
+  const [{ data: budgets }, { data: budgetSummaries }, { data: clients }, { data: expenses }] = await Promise.all([
     budgetsQuery,
-    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name')
+    supabase
+      .from('forecast_budgets')
+      .select('forecast_month, expected_money_out')
+      .eq('organization_id', organization.id),
+    supabase.from('clients').select('id, name').eq('organization_id', organization.id).order('name'),
+    supabase
+      .from('business_expenses')
+      .select('expense_date, total_amount, status')
+      .eq('organization_id', organization.id)
+      .neq('status', 'cancelled')
   ])
   const createAction = createForecastBudgetFromForm.bind(null, organization.id, orgSlug)
   const itemAction = addForecastBudgetItemFromForm.bind(null, organization.id, orgSlug)
@@ -89,21 +103,84 @@ export default async function ForecastBudgetPage({ params, searchParams }: Forec
       </section>
       {(budgets ?? []).map((budget) => {
         const bounds = monthBounds(budget.forecast_month)
+        const previousPeriod = previousMonth(budget.forecast_month)
+        const previousBounds = monthBounds(previousPeriod)
+        const previousForecastOut = Number((budgetSummaries ?? []).find((item) => item.forecast_month === previousPeriod)?.expected_money_out ?? 0)
+        const previousActualExpense = (expenses ?? [])
+          .filter((expense) => expense.expense_date >= previousBounds.start && expense.expense_date <= previousBounds.end)
+          .reduce((sum, expense) => sum + Number(expense.total_amount), 0)
+        const carriedDebt = Math.max(previousActualExpense - previousForecastOut, 0)
+        const expectedMoneyIn = Number(budget.expected_money_in)
+        const expectedMoneyOut = Number(budget.expected_money_out)
+        const expectedTaxReserve = Number(budget.expected_tax_reserve)
+        const totalOutWithDebt = expectedMoneyOut + carriedDebt
+        const closingAfterDebt = Number(budget.opening_cash) + expectedMoneyIn - totalOutWithDebt
         const filteredItems = (budget.forecast_budget_items ?? []).filter((item) => {
           if (filters.clientId && item.client_id !== filters.clientId) return false
           if (filters.category && !item.category.toLowerCase().includes(filters.category.toLowerCase())) return false
           return true
         })
+        const categoryRows = Object.values(filteredItems.reduce<Record<string, { category: string; moneyIn: number; moneyOut: number }>>((acc, item) => {
+          const row = acc[item.category] ?? { category: item.category, moneyIn: 0, moneyOut: 0 }
+          if (['money_in', 'owner_equity'].includes(item.item_type)) {
+            row.moneyIn += Number(item.expected_amount)
+          } else {
+            row.moneyOut += Number(item.expected_amount)
+          }
+          acc[item.category] = row
+          return acc
+        }, {}))
 
         return (
           <section className="card" key={budget.id}>
             <h2>{budget.forecast_month} · {budget.status}</h2>
-            <div className="grid">
-              <div><strong>Opening cash</strong><p>{Number(budget.opening_cash).toLocaleString()}</p></div>
-              <div><strong>Expected in</strong><p>{Number(budget.expected_money_in).toLocaleString()}</p></div>
-              <div><strong>Expected out</strong><p>{Number(budget.expected_money_out).toLocaleString()}</p></div>
-              <div><strong>Tax reserve</strong><p>{Number(budget.expected_tax_reserve).toLocaleString()}</p></div>
-              <div><strong>Expected closing</strong><p>{Number(budget.expected_closing_cash).toLocaleString()}</p></div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Budget line</th>
+                    <th>Amount</th>
+                    <th>How it is calculated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Opening cash</td>
+                    <td>{Number(budget.opening_cash).toLocaleString()}</td>
+                    <td>Cash planned at the start of this month</td>
+                  </tr>
+                  <tr>
+                    <td>Expected money in</td>
+                    <td>{expectedMoneyIn.toLocaleString()}</td>
+                    <td>Total money in forecast items</td>
+                  </tr>
+                  <tr>
+                    <td>Expected monthly expenses</td>
+                    <td>{expectedMoneyOut.toLocaleString()}</td>
+                    <td>Total money out forecast items</td>
+                  </tr>
+                  <tr>
+                    <td>Debt carried from {previousPeriod}</td>
+                    <td>{carriedDebt.toLocaleString()}</td>
+                    <td>{previousActualExpense.toLocaleString()} actual expense - {previousForecastOut.toLocaleString()} previous forecast</td>
+                  </tr>
+                  <tr>
+                    <td>Total cash needed this month</td>
+                    <td>{totalOutWithDebt.toLocaleString()}</td>
+                    <td>Expected monthly expenses + carried debt</td>
+                  </tr>
+                  <tr>
+                    <td>Tax reserve</td>
+                    <td>{expectedTaxReserve.toLocaleString()}</td>
+                    <td>Planned tax reserve for this month</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Projected closing cash</strong></td>
+                    <td><strong>{closingAfterDebt.toLocaleString()}</strong></td>
+                    <td>Opening cash + money in - total cash needed</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <form className="inline-form" action={statusAction}>
               <input type="hidden" name="forecastBudgetId" value={budget.id} />
@@ -116,6 +193,35 @@ export default async function ForecastBudgetPage({ params, searchParams }: Forec
               </select>
               <button type="submit">Update status</button>
             </form>
+            <h3>Monthly budget by category</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Money in</th>
+                    <th>Money out</th>
+                    <th>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryRows.map((row) => (
+                    <tr key={row.category}>
+                      <td>{row.category.replaceAll('_', ' ')}</td>
+                      <td>{row.moneyIn.toLocaleString()}</td>
+                      <td>{row.moneyOut.toLocaleString()}</td>
+                      <td>{(row.moneyIn - row.moneyOut).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td><strong>Total</strong></td>
+                    <td><strong>{expectedMoneyIn.toLocaleString()}</strong></td>
+                    <td><strong>{totalOutWithDebt.toLocaleString()}</strong></td>
+                    <td><strong>{(expectedMoneyIn - totalOutWithDebt).toLocaleString()}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <h3>Add forecast item</h3>
             <form className="filter-bar" action={itemAction}>
               <input type="hidden" name="forecastBudgetId" value={budget.id} />
