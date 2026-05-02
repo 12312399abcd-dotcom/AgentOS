@@ -10,6 +10,13 @@ type ExportRouteProps = {
   params: Promise<{ exportType: string }>
 }
 
+type ExportRow = Record<string, CsvCell> & {
+  business_accounts?: unknown
+  clients?: unknown
+  payroll_items?: ExportRow[]
+  profiles?: unknown
+}
+
 const operationExports = new Set(['content', 'tasks', 'social'])
 const financeExports = new Set(['cashflow', 'business-expenses', 'invoices', 'payroll', 'capital-loans', 'forecast-variance', 'income-statement', 'balance-sheet', 'tax-summary'])
 
@@ -101,7 +108,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     const { data, error } = await query
     if (error) return exportError(error)
 
-    const rows = (data ?? []).map((task): CsvCell[] => [
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((task): CsvCell[] => [
       task.title,
       getClientName(task.clients),
       task.task_type,
@@ -127,7 +134,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     const { data, error } = await query
     if (error) return exportError(error)
 
-    const rows = (data ?? []).map((post): CsvCell[] => [
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((post): CsvCell[] => [
       getClientName(post.clients),
       post.channel,
       post.published_url,
@@ -164,7 +171,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     const { data, error } = await query
     if (error) return exportError(error)
 
-    const rows = (data ?? []).map((transaction): CsvCell[] => {
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((transaction): CsvCell[] => {
       const account = Array.isArray(transaction.business_accounts) ? transaction.business_accounts[0] : transaction.business_accounts
       return [
         transaction.transaction_date,
@@ -196,7 +203,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
 
     const { data, error } = await query
     if (error) return exportError(error)
-    const rows = (data ?? []).map((expense): CsvCell[] => [
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((expense): CsvCell[] => [
       expense.expense_date,
       expense.due_date,
       expense.paid_date,
@@ -226,7 +233,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
 
     const { data, error } = await query
     if (error) return exportError(error)
-    const rows = (data ?? []).map((invoice): CsvCell[] => [
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((invoice): CsvCell[] => [
       invoice.invoice_number,
       getClientName(invoice.clients),
       invoice.service_period_start,
@@ -256,8 +263,8 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
 
     const { data, error } = await query
     if (error) return exportError(error)
-    const rows = (data ?? []).flatMap((cycle): CsvCell[][] =>
-      (cycle.payroll_items ?? []).map((item): CsvCell[] => {
+    const rows = ((data ?? []) as unknown as ExportRow[]).flatMap((cycle): CsvCell[][] =>
+      ((cycle.payroll_items ?? []) as unknown as ExportRow[]).map((item): CsvCell[] => {
         const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles
         return [
           cycle.period_month,
@@ -294,7 +301,7 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
 
     const { data, error } = await query
     if (error) return exportError(error)
-    const rows = (data ?? []).map((transaction): CsvCell[] => [
+    const rows = ((data ?? []) as unknown as ExportRow[]).map((transaction): CsvCell[] => [
       transaction.transaction_date,
       transaction.transaction_type,
       transaction.counterparty,
@@ -334,10 +341,12 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
     const [{ data: items, error: forecastError }, { data: cashflow, error: cashflowError }] = await Promise.all([forecastQuery, cashflowQuery])
     if (forecastError) return exportError(forecastError)
     if (cashflowError) return exportError(cashflowError)
-    const categories = new Set([...(items ?? []).map((item) => item.category), ...(cashflow ?? []).map((row) => row.category)])
+    const forecastItems = (items ?? []) as unknown as ExportRow[]
+    const cashflowRows = (cashflow ?? []) as unknown as ExportRow[]
+    const categories = new Set([...forecastItems.map((item) => item.category), ...cashflowRows.map((row) => row.category)])
     const rows = Array.from(categories).sort().map((category): CsvCell[] => {
-      const forecast = (items ?? []).filter((item) => item.category === category).reduce((sum, item) => sum + Number(item.expected_amount), 0)
-      const actual = (cashflow ?? []).filter((row) => row.category === category).reduce((sum, row) => sum + Number(row.amount), 0)
+      const forecast = forecastItems.filter((item) => item.category === category).reduce((sum, item) => sum + Number(item.expected_amount), 0)
+      const actual = cashflowRows.filter((row) => row.category === category).reduce((sum, row) => sum + Number(row.amount), 0)
       const variance = actual - forecast
       return [month, category, forecast, actual, variance, forecast === 0 ? 'N/A' : `${((variance / forecast) * 100).toFixed(2)}%`]
     })
@@ -406,13 +415,16 @@ export async function GET(req: Request, { params }: ExportRouteProps) {
   ])
   if (transactionsError) return exportError(transactionsError)
   if (settingsError) return exportError(settingsError)
-  const taxableRevenue = (transactions ?? [])
-    .filter((row) => row.direction === 'money_in' && ['client_retainer', 'project_payment', 'consulting_fee', 'performance_fee', 'other_income'].includes(row.category))
+  const transactionRows = (transactions ?? []) as unknown as ExportRow[]
+  const taxableRevenue = transactionRows
+    .filter((row) => row.direction === 'money_in' && ['client_retainer', 'project_payment', 'consulting_fee', 'performance_fee', 'other_income'].includes(String(row.category)))
     .reduce((sum, row) => sum + Number(row.amount), 0)
-  const taxPaid = (transactions ?? [])
+  const taxPaid = transactionRows
     .filter((row) => row.direction === 'money_out' && row.category === 'tax_payment')
     .reduce((sum, row) => sum + Number(row.amount), 0)
-  const targetTaxReserve = taxableRevenue * Number(settings?.tax_reserve_rate ?? 0)
+  const financeSettings = settings as { tax_reserve_rate?: number | string | null } | null
+  const taxReserveRate = Number(financeSettings?.tax_reserve_rate ?? 0)
+  const targetTaxReserve = taxableRevenue * taxReserveRate
 
-  return csvResponse(`tax-summary-${month}.csv`, toCsv(['Month', 'Taxable Revenue', 'Tax Reserve Rate', 'Target Tax Reserve', 'Tax Paid', 'Reserve Gap'], [[month, taxableRevenue, Number(settings?.tax_reserve_rate ?? 0), targetTaxReserve, taxPaid, targetTaxReserve - taxPaid]]))
+  return csvResponse(`tax-summary-${month}.csv`, toCsv(['Month', 'Taxable Revenue', 'Tax Reserve Rate', 'Target Tax Reserve', 'Tax Paid', 'Reserve Gap'], [[month, taxableRevenue, taxReserveRate, targetTaxReserve, taxPaid, targetTaxReserve - taxPaid]]))
 }

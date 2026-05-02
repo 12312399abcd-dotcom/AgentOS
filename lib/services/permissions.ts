@@ -11,6 +11,15 @@ export type OrgMember = {
   status: string
 }
 
+export type OrganizationSummary = {
+  id: string
+  name: string
+  slug: string
+  status: string
+  timezone: string
+  currency: string
+}
+
 export async function getCurrentUser() {
   const supabase = await createClient()
   const {
@@ -35,7 +44,7 @@ export async function requireUser() {
   return user
 }
 
-export async function getOrganizationBySlug(orgSlug: string) {
+export async function getOrganizationBySlug(orgSlug: string): Promise<OrganizationSummary | null> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('organizations')
@@ -47,7 +56,7 @@ export async function getOrganizationBySlug(orgSlug: string) {
     return null
   }
 
-  return data
+  return data as OrganizationSummary
 }
 
 export async function getCurrentOrgMember(orgId: string): Promise<OrgMember | null> {
