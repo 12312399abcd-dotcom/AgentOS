@@ -54,7 +54,7 @@ export async function GET(req: Request) {
   for (const invoice of [...(overdueInvoices ?? []), ...(dueSoonInvoices ?? [])]) {
     const financeRecipients = await listFinanceRecipientIds(invoice.organization_id)
     const organization = Array.isArray(invoice.organizations) ? invoice.organizations[0] : invoice.organizations
-    const isOverdue = invoice.due_date < today
+    const isOverdue = !!invoice.due_date && invoice.due_date < today
 
     notifications.push(...financeRecipients.map((userId) => ({
       organizationId: invoice.organization_id,

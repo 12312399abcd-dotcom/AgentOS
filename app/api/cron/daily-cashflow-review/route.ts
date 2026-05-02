@@ -24,9 +24,9 @@ export async function GET(req: Request) {
   for (const organization of organizations ?? []) {
     const settings = Array.isArray(organization.finance_control_settings) ? organization.finance_control_settings[0] : organization.finance_control_settings
     const minimumReserve = Number(settings?.minimum_cash_reserve ?? 0)
-    const openingCash = (organization.business_accounts ?? []).reduce((sum, account) => sum + Number(account.opening_balance), 0)
-    const moneyIn = (organization.cashflow_transactions ?? []).filter((row) => row.direction === 'money_in').reduce((sum, row) => sum + Number(row.amount), 0)
-    const moneyOut = (organization.cashflow_transactions ?? []).filter((row) => row.direction === 'money_out').reduce((sum, row) => sum + Number(row.amount), 0)
+    const openingCash = (organization.business_accounts ?? []).reduce((sum: number, account) => sum + Number(account.opening_balance), 0)
+    const moneyIn = (organization.cashflow_transactions ?? []).filter((row) => row.direction === 'money_in').reduce((sum: number, row) => sum + Number(row.amount), 0)
+    const moneyOut = (organization.cashflow_transactions ?? []).filter((row) => row.direction === 'money_out').reduce((sum: number, row) => sum + Number(row.amount), 0)
     const currentCash = openingCash + moneyIn - moneyOut
 
     if (currentCash >= minimumReserve) continue

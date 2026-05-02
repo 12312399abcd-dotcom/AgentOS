@@ -32,10 +32,12 @@ export async function GET(req: Request) {
 
     if (Number(session.active_minutes) < limit) continue
 
-    warningSessions.push({ id: session.id, organizationId: session.organization_id })
-    const admins = await listAdminRecipientIds(session.organization_id)
+    if (!session.organization_id) continue
+    const organizationId = session.organization_id
+    warningSessions.push({ id: session.id, organizationId })
+    const admins = await listAdminRecipientIds(organizationId)
     notifications.push(...admins.map((userId) => ({
-      organizationId: session.organization_id,
+      organizationId,
       userId,
       type: 'session_limit_warning',
       title: 'Member session limit reached',
